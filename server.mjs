@@ -10,7 +10,9 @@ const portArgIndex = process.argv.findIndex(
 const portFromArgs =
   portArgIndex >= 0 ? process.argv.at(portArgIndex + 1) : undefined;
 const port = Number.parseInt(portFromArgs ?? process.env.PORT ?? "3000", 10);
-const hostname = process.env.HOSTNAME ?? "0.0.0.0";
+// Nao usar HOSTNAME: Render/Docker definem essa variavel com o id do container,
+// e o servidor precisa escutar em todas as interfaces para o proxy alcancar.
+const hostname = process.env.HOST ?? "0.0.0.0";
 const dev =
   process.env.NODE_ENV !== "production" &&
   !process.argv.includes("--production");
@@ -31,5 +33,5 @@ const { createSocketServer } = await jiti.import("./lib/socket/server.ts");
 createSocketServer(server);
 
 server.listen(port, hostname, () => {
-  console.log(`> Ready on http://localhost:${port}`);
+  console.log(`> Ready on http://${hostname}:${port}`);
 });
