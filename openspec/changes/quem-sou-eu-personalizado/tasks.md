@@ -1,7 +1,7 @@
 ## 1. Dados e seed
 
 - [x] 1.1 Adicionar registro do jogo `quem-sou-eu-personalizado` em `prisma/seed.ts` (type, name, description, isActive)
-- [ ] 1.2 Rodar seed local e confirmar que o jogo aparece na lista da sala
+- [x] 1.2 Rodar seed local e confirmar que o jogo aparece na lista da sala
 
 ## 2. Tipos e eventos de socket
 
