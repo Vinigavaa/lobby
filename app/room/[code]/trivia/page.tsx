@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { TriviaGame } from "@/components/trivia/trivia-game";
+import { PageTransition } from "@/components/ui/page-transition";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -53,5 +54,9 @@ export default async function TriviaPage({ params }: TriviaPageProps) {
     notFound();
   }
 
-  return <TriviaGame code={room.code} />;
+  return (
+    <PageTransition>
+      <TriviaGame code={room.code} />
+    </PageTransition>
+  );
 }

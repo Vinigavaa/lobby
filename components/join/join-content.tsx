@@ -1,7 +1,14 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import {
+  FormEvent,
+  KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, LogIn } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,6 +16,11 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  fetchWithTimeout,
+  isTimeoutError,
+  slowRequestWarningMs,
+} from "@/lib/fetch-with-timeout";
 import { cn } from "@/lib/utils";
 
 const avatarOptions = ["🎲", "🎮", "🪩", "🚀", "🧠", "🎭"];
@@ -19,12 +31,20 @@ const codeLength = 6;
 
 export function JoinContent() {
   const router = useRouter();
+  // Sem deslocamento quando o sistema pede menos movimento.
+  const prefersReducedMotion = useReducedMotion();
   const [nickname, setNickname] = useState("");
   const [avatar, setAvatar] = useState(avatarOptions[0]);
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
-  const [isJoining, setIsJoining] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
+  // isNavigating segura o carregamento durante a renderizacao do lobby, que e
+  // onde estava o intervalo sem feedback.
+  const [isNavigating, startNavigation] = useTransition();
   const digitRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const slowTimerRef = useRef<number | null>(null);
+  const isBusy = isSubmitting || isNavigating;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -45,6 +65,14 @@ export function JoinContent() {
     }, 0);
 
     return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (slowTimerRef.current !== null) {
+        window.clearTimeout(slowTimerRef.current);
+      }
+    };
   }, []);
 
   function updateNickname(value: string) {
@@ -106,11 +134,16 @@ export function JoinContent() {
       return;
     }
 
-    setIsJoining(true);
+    setIsSubmitting(true);
+    setIsSlow(false);
+    slowTimerRef.current = window.setTimeout(
+      () => setIsSlow(true),
+      slowRequestWarningMs
+    );
 
     try {
       const storedUserId = localStorage.getItem(userIdKey);
-      const response = await fetch("/api/rooms/join", {
+      const response = await fetchWithTimeout("/api/rooms/join", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -135,12 +168,27 @@ export function JoinContent() {
       localStorage.setItem(nicknameKey, nickname.trim());
       localStorage.setItem(avatarKey, avatar);
       localStorage.setItem(userIdKey, data.userId);
-      router.push(`/room/${data.code}`);
-    } catch {
-      setError("Nao foi possivel entrar na sala.");
+      // Dentro da transicao o carregamento continua ativo ate o lobby assumir.
+      startNavigation(() => router.push(`/room/${data.code}`));
+    } catch (requestError) {
+      setError(
+        isTimeoutError(requestError)
+          ? "O servidor nao respondeu. Tente novamente."
+          : "Nao foi possivel entrar na sala."
+      );
     } finally {
-      setIsJoining(false);
+      clearSlowTimer();
+      setIsSubmitting(false);
     }
+  }
+
+  function clearSlowTimer() {
+    if (slowTimerRef.current !== null) {
+      window.clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+
+    setIsSlow(false);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -164,7 +212,7 @@ export function JoinContent() {
 
         <motion.div
           className="flex flex-1 flex-col items-center justify-center gap-7 py-8"
-          initial={{ opacity: 0, y: 18 }}
+          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
@@ -230,14 +278,23 @@ export function JoinContent() {
               </p>
             ) : null}
 
+            {isSlow ? (
+              <p
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent-foreground"
+                aria-live="polite"
+              >
+                O servidor pode estar iniciando. Aguarde alguns segundos...
+              </p>
+            ) : null}
+
             <Button
               type="submit"
               size="lg"
               className="h-14 w-full gap-2 rounded-[14px] text-base"
-              disabled={isJoining}
+              isLoading={isBusy}
             >
-              <LogIn className="size-4" />
-              {isJoining ? "Entrando..." : "Entrar"}
+              {isBusy ? null : <LogIn className="size-4" />}
+              {isBusy ? "Entrando na sala..." : "Entrar"}
             </Button>
 
             <p className="text-center text-[12.5px] text-muted-foreground/70">

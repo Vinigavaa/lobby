@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { GuessWhoGame } from "@/components/guess-who/guess-who-game";
+import { PageTransition } from "@/components/ui/page-transition";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -53,5 +54,9 @@ export default async function GuessWhoPage({ params }: GuessWhoPageProps) {
     notFound();
   }
 
-  return <GuessWhoGame code={room.code} />;
+  return (
+    <PageTransition>
+      <GuessWhoGame code={room.code} />
+    </PageTransition>
+  );
 }

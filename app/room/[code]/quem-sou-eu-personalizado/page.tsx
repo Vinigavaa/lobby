@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { CustomGuessWhoGame } from "@/components/quem-sou-eu-personalizado/custom-guess-who-game";
+import { PageTransition } from "@/components/ui/page-transition";
 import { customGuessWhoGameType } from "@/lib/custom-guess-who-engine";
 import { prisma } from "@/lib/prisma";
 
@@ -56,5 +57,9 @@ export default async function CustomGuessWhoPage({
     notFound();
   }
 
-  return <CustomGuessWhoGame code={room.code} />;
+  return (
+    <PageTransition>
+      <CustomGuessWhoGame code={room.code} />
+    </PageTransition>
+  );
 }

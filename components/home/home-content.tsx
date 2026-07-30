@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { FormEvent, useEffect, useRef, useState, useTransition } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { LogIn, Plus, Smartphone } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  fetchWithTimeout,
+  isTimeoutError,
+  slowRequestWarningMs,
+} from "@/lib/fetch-with-timeout";
 import { cn } from "@/lib/utils";
 
 const avatarOptions = ["🎲", "🎮", "🪩", "🚀", "🧠", "🎭"];
@@ -18,10 +23,19 @@ const userIdKey = "partyroom:user-id";
 
 export function HomeContent() {
   const router = useRouter();
+  // Sem deslocamento quando o sistema pede menos movimento.
+  const prefersReducedMotion = useReducedMotion();
+  const entryOffset = (value: number) => (prefersReducedMotion ? 0 : value);
   const [nickname, setNickname] = useState("");
   const [avatar, setAvatar] = useState(avatarOptions[0]);
   const [error, setError] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSlow, setIsSlow] = useState(false);
+  // isNavigating segura o carregamento durante a renderizacao do lobby, que e
+  // onde estava o intervalo sem feedback.
+  const [isNavigating, startNavigation] = useTransition();
+  const slowTimerRef = useRef<number | null>(null);
+  const isBusy = isSubmitting || isNavigating;
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -43,6 +57,23 @@ export function HomeContent() {
 
     return () => window.clearTimeout(timeout);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (slowTimerRef.current !== null) {
+        window.clearTimeout(slowTimerRef.current);
+      }
+    };
+  }, []);
+
+  function clearSlowTimer() {
+    if (slowTimerRef.current !== null) {
+      window.clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+
+    setIsSlow(false);
+  }
 
   function saveProfile() {
     const trimmedNickname = nickname.trim();
@@ -89,7 +120,7 @@ export function HomeContent() {
 
   function navigateTo(path: string) {
     if (saveProfile()) {
-      router.push(path);
+      startNavigation(() => router.push(path));
     }
   }
 
@@ -98,11 +129,16 @@ export function HomeContent() {
       return;
     }
 
-    setIsCreating(true);
+    setIsSubmitting(true);
+    setIsSlow(false);
+    slowTimerRef.current = window.setTimeout(
+      () => setIsSlow(true),
+      slowRequestWarningMs
+    );
 
     try {
       const storedUserId = localStorage.getItem(userIdKey);
-      const response = await fetch("/api/rooms", {
+      const response = await fetchWithTimeout("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -124,11 +160,17 @@ export function HomeContent() {
       }
 
       localStorage.setItem(userIdKey, data.userId);
-      router.push(`/room/${data.code}`);
-    } catch {
-      setError("Nao foi possivel criar a sala.");
+      // Dentro da transicao o carregamento continua ativo ate o lobby assumir.
+      startNavigation(() => router.push(`/room/${data.code}`));
+    } catch (requestError) {
+      setError(
+        isTimeoutError(requestError)
+          ? "O servidor nao respondeu. Tente novamente."
+          : "Nao foi possivel criar a sala."
+      );
     } finally {
-      setIsCreating(false);
+      clearSlowTimer();
+      setIsSubmitting(false);
     }
   }
 
@@ -142,7 +184,7 @@ export function HomeContent() {
       <section className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-between px-5 py-6 sm:max-w-2xl sm:px-8 lg:max-w-5xl lg:py-10">
         <motion.div
           className="flex items-center justify-between"
-          initial={{ opacity: 0, y: -12 }}
+          initial={{ opacity: 0, y: entryOffset(-12) }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
         >
@@ -160,7 +202,7 @@ export function HomeContent() {
         <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
           <motion.div
             className="space-y-4 text-center sm:text-left"
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: entryOffset(18) }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.05 }}
           >
@@ -181,7 +223,7 @@ export function HomeContent() {
           <motion.form
             onSubmit={handleSubmit}
             className="space-y-4"
-            initial={{ opacity: 0, scale: 0.97, y: 18 }}
+            initial={{ opacity: 0, scale: prefersReducedMotion ? 1 : 0.97, y: entryOffset(18) }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.12 }}
           >
@@ -246,16 +288,25 @@ export function HomeContent() {
                 type="submit"
                 size="lg"
                 className="h-14 w-full gap-2 rounded-[14px] text-base"
-                disabled={isCreating}
+                isLoading={isBusy}
               >
-                <Plus className="size-4" />
-                {isCreating ? "Criando..." : "Criar sala"}
+                {isBusy ? null : <Plus className="size-4" />}
+                {isBusy ? "Criando sala..." : "Criar sala"}
               </Button>
+              {isSlow ? (
+                <p
+                  className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground"
+                  aria-live="polite"
+                >
+                  O servidor pode estar iniciando. Aguarde alguns segundos...
+                </p>
+              ) : null}
               <Button
                 type="button"
                 size="lg"
                 variant="secondary"
                 className="h-14 w-full gap-2 rounded-[14px] border border-border text-base"
+                disabled={isBusy}
                 onClick={() => navigateTo("/join")}
               >
                 <LogIn className="size-4" />
@@ -265,6 +316,7 @@ export function HomeContent() {
                 type="button"
                 variant="ghost"
                 className="h-11 w-full gap-2 text-accent hover:text-accent"
+                disabled={isBusy}
                 onClick={() => navigateTo("/local")}
               >
                 <Smartphone className="size-4" />

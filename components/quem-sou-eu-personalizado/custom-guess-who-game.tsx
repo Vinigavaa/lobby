@@ -7,6 +7,7 @@ import {
   Eye,
   HelpCircle,
   Hourglass,
+  Loader2,
   LogOut,
   PencilLine,
   RotateCcw,
@@ -19,10 +20,12 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConnectionError } from "@/components/ui/connection-error";
 import { Input } from "@/components/ui/input";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
 import type { CustomGuessWhoStatePayload } from "@/lib/socket/types";
+import { useConnectionGuard } from "@/lib/use-connection-guard";
 import { cn } from "@/lib/utils";
 
 const userIdKey = "partyroom:user-id";
@@ -45,6 +48,9 @@ export function CustomGuessWhoGame({ code }: CustomGuessWhoGameProps) {
   const [wasGuessRejected, setWasGuessRejected] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [error, setError] = useState("");
+  const [hasConnectionFailed, setHasConnectionFailed] = useConnectionGuard(
+    state !== null
+  );
 
   const ownPlayer = useMemo(
     () => state?.players.find((player) => player.isCurrentUser) ?? null,
@@ -79,11 +85,15 @@ export function CustomGuessWhoGame({ code }: CustomGuessWhoGameProps) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setHasConnectionFailed(false);
       socket.emit(SOCKET_EVENTS.JOIN_ROOM, {
         roomCode: code,
         userId: storedUserId,
       });
     });
+
+    // reconnect_failed vive no manager, nao no socket.
+    socket.io.on("reconnect_failed", () => setHasConnectionFailed(true));
 
     socket.on(SOCKET_EVENTS.CUSTOM_GUESS_WHO_STARTED, (payload) => {
       if (payload.roomCode !== code) {
@@ -137,10 +147,16 @@ export function CustomGuessWhoGame({ code }: CustomGuessWhoGameProps) {
 
     return () => {
       socket.off();
+      socket.io.off("reconnect_failed");
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, router]);
+  }, [code, router, setHasConnectionFailed]);
+
+  function retryConnection() {
+    setHasConnectionFailed(false);
+    socketRef.current?.connect();
+  }
 
   function submitCharacter() {
     const character = characterText.trim();
@@ -245,12 +261,24 @@ export function CustomGuessWhoGame({ code }: CustomGuessWhoGameProps) {
             </p>
           ) : null}
 
-          {!state ? (
+          {!state && hasConnectionFailed ? (
+            <ConnectionError
+              onRetry={retryConnection}
+              onBackToLobby={() => router.push(`/room/${code}`)}
+            />
+          ) : null}
+
+          {!state && !hasConnectionFailed ? (
             <section className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <h2 className="font-semibold">Carregando partida...</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Aguardando estado da partida.
-              </p>
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <div>
+                  <h2 className="font-semibold">Carregando partida...</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Aguardando estado da partida.
+                  </p>
+                </div>
+              </div>
             </section>
           ) : null}
 

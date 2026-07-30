@@ -5,6 +5,7 @@ import {
   Eye,
   Gamepad2,
   HelpCircle,
+  Loader2,
   LogOut,
   ShieldCheck,
   Trophy,
@@ -12,9 +13,11 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConnectionError } from "@/components/ui/connection-error";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
 import type { GuessWhoStatePayload } from "@/lib/socket/types";
+import { useConnectionGuard } from "@/lib/use-connection-guard";
 
 const userIdKey = "partyroom:user-id";
 
@@ -29,6 +32,9 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
   const [state, setState] = useState<GuessWhoStatePayload | null>(null);
   const [showOwnResult, setShowOwnResult] = useState(false);
   const [error, setError] = useState("");
+  const [hasConnectionFailed, setHasConnectionFailed] = useConnectionGuard(
+    state !== null
+  );
 
   const ownPlayer = useMemo(
     () => state?.players.find((player) => player.isCurrentUser) ?? null,
@@ -54,11 +60,15 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setHasConnectionFailed(false);
       socket.emit(SOCKET_EVENTS.JOIN_ROOM, {
         roomCode: code,
         userId: storedUserId,
       });
     });
+
+    // reconnect_failed vive no manager, nao no socket.
+    socket.io.on("reconnect_failed", () => setHasConnectionFailed(true));
 
     socket.on(SOCKET_EVENTS.GUESS_WHO_STARTED, (payload) => {
       if (payload.roomCode !== code) {
@@ -91,10 +101,16 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
 
     return () => {
       socket.off();
+      socket.io.off("reconnect_failed");
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, router]);
+  }, [code, router, setHasConnectionFailed]);
+
+  function retryConnection() {
+    setHasConnectionFailed(false);
+    socketRef.current?.connect();
+  }
 
   function endRound() {
     if (!currentUserId || !canEndRound) {
@@ -134,6 +150,12 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
             </p>
           ) : null}
 
+          {!state && hasConnectionFailed ? (
+            <ConnectionError
+              onRetry={retryConnection}
+              onBackToLobby={() => router.push(`/room/${code}`)}
+            />
+          ) : (
           <section className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
             <div className="mb-5 flex items-center gap-3">
               <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
@@ -210,14 +232,18 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
                 ))}
               </div>
             ) : (
-              <div className="space-y-3">
-                <h2 className="font-semibold">Carregando cartas...</h2>
-                <p className="text-sm text-muted-foreground">
-                  Aguardando estado da rodada.
-                </p>
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <div>
+                  <h2 className="font-semibold">Carregando cartas...</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Aguardando estado da rodada.
+                  </p>
+                </div>
               </div>
             )}
           </section>
+          )}
 
           {isResult && ownPlayer?.card ? (
             <section className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ImpostorGame } from "@/components/impostor/impostor-game";
+import { PageTransition } from "@/components/ui/page-transition";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -53,5 +54,9 @@ export default async function ImpostorPage({ params }: ImpostorPageProps) {
     notFound();
   }
 
-  return <ImpostorGame code={room.code} />;
+  return (
+    <PageTransition>
+      <ImpostorGame code={room.code} />
+    </PageTransition>
+  );
 }

@@ -6,6 +6,7 @@ import {
   Flag,
   Home,
   ListChecks,
+  Loader2,
   LogOut,
   RotateCcw,
   ThumbsDown,
@@ -14,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConnectionError } from "@/components/ui/connection-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
@@ -23,6 +25,7 @@ import type {
   StopReviewCategoryPayload,
   StopStatePayload,
 } from "@/lib/socket/types";
+import { useConnectionGuard } from "@/lib/use-connection-guard";
 import { cn } from "@/lib/utils";
 
 const userIdKey = "partyroom:user-id";
@@ -52,6 +55,9 @@ export function StopGame({ code }: StopGameProps) {
   const [now, setNow] = useState(() => Date.now());
   const [deadline, setDeadline] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [hasConnectionFailed, setHasConnectionFailed] = useConnectionGuard(
+    state !== null
+  );
 
   const phase = state?.phase ?? "setup";
   const isHost = Boolean(state?.isHost);
@@ -79,11 +85,15 @@ export function StopGame({ code }: StopGameProps) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setHasConnectionFailed(false);
       socket.emit(SOCKET_EVENTS.JOIN_ROOM, {
         roomCode: code,
         userId: storedUserId,
       });
     });
+
+    // reconnect_failed vive no manager, nao no socket.
+    socket.io.on("reconnect_failed", () => setHasConnectionFailed(true));
 
     socket.on(SOCKET_EVENTS.STOP_STARTED, (payload) => {
       if (payload.roomCode === code) {
@@ -118,10 +128,16 @@ export function StopGame({ code }: StopGameProps) {
 
     return () => {
       socket.off();
+      socket.io.off("reconnect_failed");
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, router]);
+  }, [code, router, setHasConnectionFailed]);
+
+  function retryConnection() {
+    setHasConnectionFailed(false);
+    socketRef.current?.connect();
+  }
 
   // Inicializa as categorias selecionadas pelo host uma unica vez.
   useEffect(() => {
@@ -301,12 +317,24 @@ export function StopGame({ code }: StopGameProps) {
             </p>
           ) : null}
 
-          {!state ? (
+          {!state && hasConnectionFailed ? (
+            <ConnectionError
+              onRetry={retryConnection}
+              onBackToLobby={() => router.push(`/room/${code}`)}
+            />
+          ) : null}
+
+          {!state && !hasConnectionFailed ? (
             <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <h2 className="font-semibold">Carregando partida...</h2>
-              <p className="text-sm text-muted-foreground">
-                Aguardando estado da sala.
-              </p>
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <div>
+                  <h2 className="font-semibold">Carregando partida...</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Aguardando estado da sala.
+                  </p>
+                </div>
+              </div>
             </div>
           ) : null}
 

@@ -6,6 +6,7 @@ import {
   EyeOff,
   Gamepad2,
   Home,
+  Loader2,
   LogOut,
   RotateCcw,
   Send,
@@ -16,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { ConnectionError } from "@/components/ui/connection-error";
 import { Input } from "@/components/ui/input";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
@@ -23,6 +25,7 @@ import type {
   ImpostorPrivateRolePayload,
   ImpostorReadyUpdatedPayload,
 } from "@/lib/socket/types";
+import { useConnectionGuard } from "@/lib/use-connection-guard";
 
 const userIdKey = "partyroom:user-id";
 const impostorRoleKey = "partyroom:impostor-role";
@@ -41,6 +44,9 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
   const [hintText, setHintText] = useState("");
   const [voteConfirmed, setVoteConfirmed] = useState(false);
   const [error, setError] = useState("");
+  const [hasConnectionFailed, setHasConnectionFailed] = useConnectionGuard(
+    role !== null
+  );
 
   useEffect(() => {
     const cachedRole = readCachedRole(code);
@@ -65,11 +71,15 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setHasConnectionFailed(false);
       socket.emit(SOCKET_EVENTS.JOIN_ROOM, {
         roomCode: code,
         userId: storedUserId,
       });
     });
+
+    // reconnect_failed vive no manager, nao no socket.
+    socket.io.on("reconnect_failed", () => setHasConnectionFailed(true));
 
     socket.on(SOCKET_EVENTS.IMPOSTOR_STARTED, (payload) => {
       if (payload.roomCode !== code) {
@@ -173,10 +183,16 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
 
     return () => {
       socket.off();
+      socket.io.off("reconnect_failed");
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [code, router]);
+  }, [code, router, setHasConnectionFailed]);
+
+  function retryConnection() {
+    setHasConnectionFailed(false);
+    socketRef.current?.connect();
+  }
 
   function leaveGame() {
     socketRef.current?.disconnect();
@@ -289,6 +305,12 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
             </p>
           ) : null}
 
+          {!role && hasConnectionFailed ? (
+            <ConnectionError
+              onRetry={retryConnection}
+              onBackToLobby={() => router.push(`/room/${code}`)}
+            />
+          ) : (
           <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
             {role ? (
               <div className="space-y-5">
@@ -340,14 +362,18 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
                 ) : null}
               </div>
             ) : (
-              <div className="space-y-3">
-                <h2 className="font-semibold">Carregando sua funcao...</h2>
-                <p className="text-sm text-muted-foreground">
-                  Aguardando informacao privada do servidor.
-                </p>
+              <div className="flex items-center gap-3">
+                <Loader2 className="size-5 animate-spin text-primary" />
+                <div>
+                  <h2 className="font-semibold">Carregando sua funcao...</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Aguardando informacao privada do servidor.
+                  </p>
+                </div>
               </div>
             )}
           </div>
+          )}
 
           {phase === "reveal" ? (
             <RevealStatus

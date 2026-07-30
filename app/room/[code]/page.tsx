@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { RoomLobby } from "@/components/room/room-lobby";
+import { PageTransition } from "@/components/ui/page-transition";
 import { prisma } from "@/lib/prisma";
 import type { GamePayload } from "@/lib/socket/types";
 
@@ -63,30 +64,32 @@ export default async function RoomPage({ params }: RoomPageProps) {
     );
 
   return (
-    <RoomLobby
-      code={room.code}
-      status={room.status}
-      games={orderedGames}
-      initialSelectedGame={
-        room.selectedGame
-          ? {
-              id: room.selectedGame.id,
-              type: room.selectedGame.type,
-              name: room.selectedGame.name,
-              description: room.selectedGame.description,
-              isActive: room.selectedGame.isActive,
-            }
-          : null
-      }
-      initialPlayers={room.players.map((player) => ({
-        id: player.id,
-        userId: player.userId,
-        nickname: player.user.nickname,
-        avatar: player.user.avatar,
-        isHost: player.isHost,
-        isConnected: player.isConnected,
-        joinedAt: player.joinedAt.toISOString(),
-      }))}
-    />
+    <PageTransition>
+      <RoomLobby
+        code={room.code}
+        status={room.status}
+        games={orderedGames}
+        initialSelectedGame={
+          room.selectedGame
+            ? {
+                id: room.selectedGame.id,
+                type: room.selectedGame.type,
+                name: room.selectedGame.name,
+                description: room.selectedGame.description,
+                isActive: room.selectedGame.isActive,
+              }
+            : null
+        }
+        initialPlayers={room.players.map((player) => ({
+          id: player.id,
+          userId: player.userId,
+          nickname: player.user.nickname,
+          avatar: player.user.avatar,
+          isHost: player.isHost,
+          isConnected: player.isConnected,
+          joinedAt: player.joinedAt.toISOString(),
+        }))}
+      />
+    </PageTransition>
   );
 }

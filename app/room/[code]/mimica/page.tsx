@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { MimicaGame } from "@/components/mimica/mimica-game";
+import { PageTransition } from "@/components/ui/page-transition";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -53,5 +54,9 @@ export default async function MimicaPage({ params }: MimicaPageProps) {
     notFound();
   }
 
-  return <MimicaGame code={room.code} />;
+  return (
+    <PageTransition>
+      <MimicaGame code={room.code} />
+    </PageTransition>
+  );
 }
