@@ -28,6 +28,15 @@ export const triviaTotalRounds = 12;
 export const triviaMinimumPlayers = 2;
 export const triviaQuestionSeconds = 40;
 
+/**
+ * Pontos de um acerto no modo local (um celular). Vale apenas para o modo
+ * local, que nao tem cronometro: sem tempo visivel nao ha como escalonar a
+ * pontuacao por velocidade de forma justa. O modo online continua usando
+ * `scoreTriviaAnswer`, e o valor aqui e o mesmo teto que ele paga por um
+ * acerto rapido para as duas escalas seguirem comparaveis.
+ */
+export const triviaLocalCorrectPoints = 1000;
+
 export const triviaWheelSpinMs = 3200;
 export const triviaThemeRevealMs = 2000;
 /** Tempo total da fase "wheel" (giro + revelacao do tema) antes da pergunta aparecer. */
