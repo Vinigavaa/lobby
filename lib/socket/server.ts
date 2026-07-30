@@ -275,6 +275,22 @@ type TriviaMutationResult = { error: string } | { roomCode: string; matchId: str
 const triviaTimerGraceMs = 250;
 const triviaTimers = new Map<string, NodeJS.Timeout>();
 
+/**
+ * Quanto falta para um prazo, calculado no servidor.
+ *
+ * Os clientes nao podem comparar o prazo absoluto com o proprio relogio:
+ * celular e desktop costumam ter relogios divergentes, e cada aparelho
+ * mostraria um tempo diferente na mesma rodada. Enviando o restante, cada
+ * cliente ancora a contagem no relogio local no momento em que recebe.
+ */
+function toRemainingMs(endsAt: string | null) {
+  if (!endsAt) {
+    return null;
+  }
+
+  return Math.max(0, new Date(endsAt).getTime() - Date.now());
+}
+
 function pickImpostorPlayer(
   players: ConnectedImpostorPlayer[],
   previousImpostorUserId?: string
@@ -3777,6 +3793,7 @@ function toMimicaStatePayload(
     durationSeconds: state.durationSeconds,
     roundNumber: state.roundNumber,
     roundEndsAt: state.roundEndsAt,
+    roundRemainingMs: toRemainingMs(state.roundEndsAt),
     currentMimerUserId: state.currentMimerUserId,
     currentMimerNickname: currentMimer?.nickname ?? null,
     isHost: hostId === userId,
@@ -4733,6 +4750,7 @@ function toStopStatePayload(
     })),
     letter: state.phase === "setup" ? null : state.letter,
     roundEndsAt: state.roundEndsAt,
+    roundRemainingMs: toRemainingMs(state.roundEndsAt),
     isHost: hostId === userId,
     hasSubmitted: Boolean(state.submissions[userId]?.submitted),
     players: state.players.map((player) => ({
@@ -5528,6 +5546,7 @@ function toTriviaStatePayload(
         }
       : null,
     phaseEndsAt: state.phaseEndsAt,
+    phaseRemainingMs: toRemainingMs(state.phaseEndsAt),
     isHost: hostId === userId,
     hasAnswered: Boolean(state.answers[userId]),
     selectedOptionIndex: state.answers[userId]?.optionIndex ?? null,

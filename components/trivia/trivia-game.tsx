@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
 import type { TriviaStatePayload } from "@/lib/socket/types";
+import { triviaQuestionSeconds } from "@/lib/trivia-themes";
 import { cn } from "@/lib/utils";
 
 import { TriviaWheel } from "./trivia-wheel";
@@ -36,14 +37,15 @@ export function TriviaGame({ code }: TriviaGameProps) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [state, setState] = useState<TriviaStatePayload | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  const [deadline, setDeadline] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const phase = state?.phase ?? "wheel";
   const isHost = Boolean(state?.isHost);
 
   const remainingSeconds =
-    phase === "question" && state?.phaseEndsAt
-      ? Math.max(0, Math.ceil((new Date(state.phaseEndsAt).getTime() - now) / 1000))
+    phase === "question" && deadline !== null
+      ? Math.max(0, Math.ceil((deadline - now) / 1000))
       : 0;
 
   useEffect(() => {
@@ -69,6 +71,12 @@ export function TriviaGame({ code }: TriviaGameProps) {
     socket.on(SOCKET_EVENTS.TRIVIA_STATE_UPDATED, (payload) => {
       if (payload.roomCode === code) {
         setState(payload);
+        // Ancora o prazo no relogio local no instante em que o restante chega.
+        setDeadline(
+          payload.phaseRemainingMs === null
+            ? null
+            : Date.now() + payload.phaseRemainingMs
+        );
         setError("");
       }
     });
@@ -104,7 +112,7 @@ export function TriviaGame({ code }: TriviaGameProps) {
       window.clearTimeout(sync);
       window.clearInterval(interval);
     };
-  }, [phase, state?.phaseEndsAt]);
+  }, [phase, deadline]);
 
   function submitAnswer(optionIndex: number) {
     if (!currentUserId || phase !== "question" || state?.hasAnswered) {
@@ -276,7 +284,9 @@ function QuestionPhase({
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
         <motion.div
           className="h-full rounded-full bg-primary"
-          animate={{ width: `${(remainingSeconds / 20) * 100}%` }}
+          animate={{
+            width: `${(remainingSeconds / triviaQuestionSeconds) * 100}%`,
+          }}
           transition={{ duration: 0.2, ease: "linear" }}
         />
       </div>

@@ -46,6 +46,7 @@ export function MimicaGame({ code }: MimicaGameProps) {
   const [category, setCategory] = useState<string>(randomCategory);
   const [duration, setDuration] = useState<DurationOption>(60);
   const [now, setNow] = useState(() => Date.now());
+  const [deadline, setDeadline] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const phase = state?.phase ?? "setup";
@@ -53,11 +54,8 @@ export function MimicaGame({ code }: MimicaGameProps) {
   const isCurrentMimer = Boolean(state?.isCurrentMimer);
 
   const remaining =
-    phase === "playing" && state?.roundEndsAt
-      ? Math.max(
-          0,
-          Math.ceil((new Date(state.roundEndsAt).getTime() - now) / 1000)
-        )
+    phase === "playing" && deadline !== null
+      ? Math.max(0, Math.ceil((deadline - now) / 1000))
       : (state?.durationSeconds ?? 0);
 
   useEffect(() => {
@@ -113,6 +111,12 @@ export function MimicaGame({ code }: MimicaGameProps) {
       }
 
       setState(payload);
+      // Ancora o prazo no relogio local no instante em que o restante chega.
+      setDeadline(
+        payload.roundRemainingMs === null
+          ? null
+          : Date.now() + payload.roundRemainingMs
+      );
       setError("");
 
       if (payload.phase !== "reveal") {
@@ -157,7 +161,7 @@ export function MimicaGame({ code }: MimicaGameProps) {
       window.clearTimeout(sync);
       window.clearInterval(interval);
     };
-  }, [phase, state?.roundEndsAt]);
+  }, [phase, deadline]);
 
   function beginRound() {
     if (!currentUserId || !isHost || phase !== "setup") {

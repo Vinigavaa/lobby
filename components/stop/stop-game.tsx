@@ -50,6 +50,7 @@ export function StopGame({ code }: StopGameProps) {
     new Set()
   );
   const [now, setNow] = useState(() => Date.now());
+  const [deadline, setDeadline] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const phase = state?.phase ?? "setup";
@@ -57,11 +58,8 @@ export function StopGame({ code }: StopGameProps) {
   const hasSubmitted = Boolean(state?.hasSubmitted);
 
   const remaining =
-    phase === "playing" && state?.roundEndsAt
-      ? Math.max(
-          0,
-          Math.ceil((new Date(state.roundEndsAt).getTime() - now) / 1000)
-        )
+    phase === "playing" && deadline !== null
+      ? Math.max(0, Math.ceil((deadline - now) / 1000))
       : (state?.durationSeconds ?? 0);
 
   useEffect(() => {
@@ -96,6 +94,12 @@ export function StopGame({ code }: StopGameProps) {
     socket.on(SOCKET_EVENTS.STOP_STATE_UPDATED, (payload) => {
       if (payload.roomCode === code) {
         setState(payload);
+        // Ancora o prazo no relogio local no instante em que o restante chega.
+        setDeadline(
+          payload.roundRemainingMs === null
+            ? null
+            : Date.now() + payload.roundRemainingMs
+        );
         setError("");
       }
     });
@@ -154,7 +158,7 @@ export function StopGame({ code }: StopGameProps) {
       window.clearTimeout(sync);
       window.clearInterval(interval);
     };
-  }, [phase, state?.roundEndsAt]);
+  }, [phase, deadline]);
 
   // Envio automatico quando o tempo esgota.
   useEffect(() => {

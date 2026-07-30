@@ -331,6 +331,8 @@ export type MimicaStatePayload = {
   durationSeconds: number;
   roundNumber: number;
   roundEndsAt: string | null;
+  /** Tempo restante calculado no servidor, para nao depender do relogio local. */
+  roundRemainingMs: number | null;
   currentMimerUserId: string | null;
   currentMimerNickname: string | null;
   isHost: boolean;
@@ -432,6 +434,8 @@ export type StopStatePayload = {
   categories: StopCategoryPayload[];
   letter: string | null;
   roundEndsAt: string | null;
+  /** Tempo restante calculado no servidor, para nao depender do relogio local. */
+  roundRemainingMs: number | null;
   isHost: boolean;
   hasSubmitted: boolean;
   players: StopPlayerPayload[];
@@ -527,6 +531,8 @@ export type TriviaStatePayload = {
   theme: TriviaThemePayload | null;
   question: TriviaQuestionPayload | null;
   phaseEndsAt: string | null;
+  /** Tempo restante calculado no servidor, para nao depender do relogio local. */
+  phaseRemainingMs: number | null;
   isHost: boolean;
   hasAnswered: boolean;
   selectedOptionIndex: number | null;

@@ -26,7 +26,7 @@ export function getTriviaTheme(id: string) {
 
 export const triviaTotalRounds = 12;
 export const triviaMinimumPlayers = 2;
-export const triviaQuestionSeconds = 20;
+export const triviaQuestionSeconds = 40;
 
 export const triviaWheelSpinMs = 3200;
 export const triviaThemeRevealMs = 2000;
