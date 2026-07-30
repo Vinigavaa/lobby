@@ -66,9 +66,9 @@ const games: LocalGame[] = [
   },
   {
     name: "Trivia",
-    description: "Responda perguntas e dispute ponto a ponto.",
-    available: false,
-    badge: "Em breve",
+    description: "Gire a roleta e responda perguntas contra o tempo.",
+    href: "/local/trivia",
+    available: true,
     icon: Gamepad2,
   },
   {

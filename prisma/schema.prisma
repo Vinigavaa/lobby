@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -115,4 +115,20 @@ model MimicaWord {
   @@unique([category, value])
   @@index([category])
   @@index([isActive])
+}
+
+model TriviaQuestion {
+  id           String   @id @default(cuid())
+  theme        String
+  question     String
+  options      Json
+  correctIndex Int
+  difficulty   String   @default("medium")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([theme])
+  @@index([isActive])
+  @@index([difficulty])
 }

@@ -1,7 +1,8 @@
 # Lobby
 
 Base de um app web de party games multiplayer com Next.js App Router,
-TypeScript, TailwindCSS, Shadcn/UI, Prisma, SQLite, Socket.IO e Framer Motion.
+TypeScript, TailwindCSS, Shadcn/UI, Prisma, PostgreSQL (Neon), Socket.IO e
+Framer Motion.
 
 ## Requisitos
 
@@ -21,14 +22,14 @@ Abra `http://localhost:3000`.
 
 ## Banco de dados
 
-Configure `DATABASE_URL` no arquivo `.env`.
+Configure `DATABASE_URL` no arquivo `.env` com a connection string do seu
+banco Postgres (ex: Neon).
 
 ```env
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://usuario:senha@host/banco?sslmode=require"
 ```
 
-O Prisma esta configurado em `prisma/schema.prisma` com SQLite, mas ainda nao ha
-modelos de dominio porque esta etapa cobre apenas o setup inicial.
+O Prisma esta configurado em `prisma/schema.prisma` com PostgreSQL.
 
 ## Scripts
 

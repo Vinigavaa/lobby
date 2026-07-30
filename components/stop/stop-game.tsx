@@ -284,7 +284,7 @@ export function StopGame({ code }: StopGameProps) {
                   ? ` · Rodada ${state.roundNumber}/${state.totalRounds}`
                   : ""}
               </p>
-              <h1 className="text-3xl font-black">Stop</h1>
+              <h1 className="font-heading text-3xl font-black">Stop</h1>
             </div>
             <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Flag className="size-6" />

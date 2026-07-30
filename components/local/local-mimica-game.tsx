@@ -223,7 +223,7 @@ function SetupView({
           <Drama className="size-6" />
         </div>
         <div className="space-y-3">
-          <h1 className="text-4xl font-black leading-none tracking-normal">
+          <h1 className="font-heading text-4xl font-black leading-none tracking-normal">
             Mimica local
           </h1>
           <p className="max-w-sm text-base leading-7 text-muted-foreground">
@@ -411,7 +411,7 @@ function ResultView({
           )}
         </div>
         <div className="space-y-3">
-          <h1 className="text-4xl font-black leading-none tracking-normal">
+          <h1 className="font-heading text-4xl font-black leading-none tracking-normal">
             {result.success ? "Acertou!" : "Tempo esgotado!"}
           </h1>
           <p className="max-w-sm text-base leading-7 text-muted-foreground">

@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Gamepad2, Hash, LogIn, Smartphone, Sparkles } from "lucide-react";
+import { LogIn, Plus, Smartphone } from "lucide-react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -146,59 +147,49 @@ export function HomeContent() {
           transition={{ duration: 0.35 }}
         >
           <div className="flex items-center gap-2">
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Sparkles className="size-5" />
+            <div className="relative size-[30px] overflow-hidden rounded-[9px]">
+              <Image src="/logo.png" alt="PartyRoom" fill className="object-cover" priority />
             </div>
-            <span className="text-lg font-semibold">PartyRoom</span>
+            <span className="font-heading text-lg font-bold">PartyRoom</span>
           </div>
-          <div className="rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground">
+          <div className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold text-muted-foreground">
             Sem login
           </div>
         </motion.div>
 
-        <div className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-12">
+        <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
           <motion.div
-            className="space-y-6"
+            className="space-y-4 text-center sm:text-left"
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.05 }}
           >
-            <div className="space-y-4">
-              <div className="inline-flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm font-medium text-accent">
-                <Gamepad2 className="size-4" />
-                Jogos rapidos para grupo
-              </div>
-              <h1 className="text-5xl font-black leading-[0.98] tracking-normal text-foreground sm:text-6xl">
-                PartyRoom
-              </h1>
-              <p className="max-w-sm text-base leading-7 text-muted-foreground sm:text-lg">
-                Crie uma sala e jogue com seus amigos em segundos.
-              </p>
+            <div className="inline-flex items-center gap-2 rounded-full bg-accent/12 px-3 py-1.5 text-xs font-bold text-accent">
+              <span aria-hidden>💬</span>
+              Jogos rapidos para grupo
             </div>
-
-            <div className="grid grid-cols-3 gap-2 text-center text-xs font-medium text-muted-foreground">
-              <div className="rounded-md border border-border bg-card px-2 py-3">
-                Codigos curtos
-              </div>
-              <div className="rounded-md border border-border bg-card px-2 py-3">
-                Avatares emoji
-              </div>
-              <div className="rounded-md border border-border bg-card px-2 py-3">
-                Party games
-              </div>
-            </div>
+            <h1 className="font-heading text-4xl font-black leading-[1.05] tracking-normal text-foreground sm:text-5xl lg:text-6xl">
+              Chame a galera
+              <br />
+              pra jogar
+            </h1>
+            <p className="mx-auto max-w-sm text-base leading-7 text-muted-foreground sm:mx-0 sm:text-lg">
+              Crie uma sala e comece a brincadeira com seus amigos em segundos.
+            </p>
           </motion.div>
 
           <motion.form
             onSubmit={handleSubmit}
-            className="rounded-lg border border-border bg-card p-4 shadow-2xl shadow-black/25 sm:p-5"
+            className="space-y-4"
             initial={{ opacity: 0, scale: 0.97, y: 18 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.12 }}
           >
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="nickname">Nickname</Label>
+            <div className="space-y-3.5 rounded-[20px] border border-border bg-card p-[18px]">
+              <div className="space-y-1.5">
+                <Label htmlFor="nickname" className="text-[13px] font-bold">
+                  Nickname
+                </Label>
                 <Input
                   id="nickname"
                   value={nickname}
@@ -217,7 +208,7 @@ export function HomeContent() {
                   maxLength={24}
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? "nickname-error" : undefined}
-                  className="h-12 bg-background text-base"
+                  className="h-12 rounded-xl border-border bg-muted text-base"
                 />
                 {error ? (
                   <p id="nickname-error" className="text-sm text-destructive">
@@ -226,9 +217,9 @@ export function HomeContent() {
                 ) : null}
               </div>
 
-              <div className="space-y-3">
-                <Label>Avatar</Label>
-                <div className="grid grid-cols-6 gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-[13px] font-bold">Avatar</Label>
+                <div className="flex gap-2">
                   {avatarOptions.map((option) => (
                     <button
                       key={option}
@@ -237,10 +228,10 @@ export function HomeContent() {
                       aria-label={`Usar avatar ${option}`}
                       aria-pressed={avatar === option}
                       className={cn(
-                        "flex aspect-square items-center justify-center rounded-md border bg-background text-2xl transition hover:border-accent hover:bg-accent/10 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
+                        "flex aspect-square flex-1 items-center justify-center rounded-xl border text-xl transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                         avatar === option
-                          ? "border-accent bg-accent text-accent-foreground shadow-lg shadow-accent/15"
-                          : "border-border"
+                          ? "border-accent bg-accent"
+                          : "border-border bg-muted hover:border-accent/60"
                       )}
                     >
                       {option}
@@ -248,37 +239,37 @@ export function HomeContent() {
                   ))}
                 </div>
               </div>
+            </div>
 
-              <div className="space-y-3 pt-1">
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="h-12 w-full gap-2"
-                  disabled={isCreating}
-                >
-                  <Hash className="size-4" />
-                  {isCreating ? "Criando..." : "Criar sala"}
-                </Button>
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="secondary"
-                  className="h-12 w-full gap-2"
-                  onClick={() => navigateTo("/join")}
-                >
-                  <LogIn className="size-4" />
-                  Entrar em sala
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-11 w-full gap-2 text-muted-foreground hover:text-foreground"
-                  onClick={() => navigateTo("/local")}
-                >
-                  <Smartphone className="size-4" />
-                  Jogar no mesmo celular
-                </Button>
-              </div>
+            <div className="space-y-2.5 pt-1">
+              <Button
+                type="submit"
+                size="lg"
+                className="h-14 w-full gap-2 rounded-[14px] text-base"
+                disabled={isCreating}
+              >
+                <Plus className="size-4" />
+                {isCreating ? "Criando..." : "Criar sala"}
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                variant="secondary"
+                className="h-14 w-full gap-2 rounded-[14px] border border-border text-base"
+                onClick={() => navigateTo("/join")}
+              >
+                <LogIn className="size-4" />
+                Entrar em sala
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-11 w-full gap-2 text-accent hover:text-accent"
+                onClick={() => navigateTo("/local")}
+              >
+                <Smartphone className="size-4" />
+                Jogar no mesmo celular
+              </Button>
             </div>
           </motion.form>
         </div>

@@ -1,13 +1,14 @@
 import "dotenv/config";
 
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 import type { Prisma } from "../generated/prisma/client";
 import { PrismaClient } from "../generated/prisma/client";
 import { mimicaWordsData } from "../lib/mimica-words-data";
+import { triviaQuestionsData } from "../lib/trivia-questions-data";
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL ?? "file:./dev.db",
+const adapter = new PrismaPg({
+  connectionString: process.env.DATABASE_URL,
 });
 
 const prisma = new PrismaClient({ adapter });
@@ -26,6 +27,12 @@ const games = [
     isActive: true,
   },
   {
+    type: "quem-sou-eu-personalizado",
+    name: "Quem Sou Eu? Personalizado",
+    description: "Cada jogador escreve o personagem secreto do proximo jogador da roda.",
+    isActive: true,
+  },
+  {
     type: "mimica",
     name: "Mimica",
     description: "Represente palavras ou desafios sem falar para o grupo adivinhar.",
@@ -41,7 +48,7 @@ const games = [
     type: "trivia",
     name: "Trivia",
     description: "Responda perguntas e dispute pontos com os outros jogadores.",
-    isActive: false,
+    isActive: true,
   },
   {
     type: "cidade-dorme",
@@ -449,6 +456,39 @@ async function main() {
           isActive: true,
         },
         update: {
+          isActive: true,
+        },
+      });
+    }
+  }
+
+  for (const [theme, questions] of Object.entries(triviaQuestionsData)) {
+    for (const item of questions) {
+      const existing = await prisma.triviaQuestion.findFirst({
+        where: { theme, question: item.question },
+        select: { id: true },
+      });
+
+      if (existing) {
+        await prisma.triviaQuestion.update({
+          where: { id: existing.id },
+          data: {
+            options: item.options,
+            correctIndex: item.correctIndex,
+            difficulty: item.difficulty,
+            isActive: true,
+          },
+        });
+        continue;
+      }
+
+      await prisma.triviaQuestion.create({
+        data: {
+          theme,
+          question: item.question,
+          options: item.options,
+          correctIndex: item.correctIndex,
+          difficulty: item.difficulty,
           isActive: true,
         },
       });

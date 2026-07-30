@@ -209,6 +209,75 @@ export type GuessWhoStatePayload = {
   players: GuessWhoPlayerPayload[];
 };
 
+export type CustomGuessWhoSubmitCharacterPayload = {
+  roomCode: string;
+  userId: string;
+  character: string;
+};
+
+export type CustomGuessWhoGuessPayload = {
+  roomCode: string;
+  userId: string;
+  guess: string;
+};
+
+export type CustomGuessWhoVotePayload = {
+  roomCode: string;
+  userId: string;
+  targetUserId: string;
+  correct: boolean;
+};
+
+export type CustomGuessWhoHostActionPayload = {
+  roomCode: string;
+  userId: string;
+};
+
+export type CustomGuessWhoStartedPayload = {
+  roomCode: string;
+  matchId: string;
+  path: string;
+};
+
+export type CustomGuessWhoBackToLobbyPayload = {
+  roomCode: string;
+  path: string;
+};
+
+export type CustomGuessWhoPendingGuessPayload = {
+  guess: string;
+  yesCount: number;
+  noCount: number;
+  totalVoters: number;
+  myVote: boolean | null;
+};
+
+export type CustomGuessWhoPlayerPayload = {
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  isCurrentUser: boolean;
+  character: string | null;
+  hasSubmittedCharacter: boolean;
+  hasSolved: boolean;
+  solvedOrder: number | null;
+  solvedSeconds: number | null;
+  pendingGuess: CustomGuessWhoPendingGuessPayload | null;
+};
+
+export type CustomGuessWhoStatePayload = {
+  roomCode: string;
+  matchId: string;
+  phase: "writing" | "playing" | "finished";
+  isHost: boolean;
+  characterMaxLength: number;
+  writesForNickname: string | null;
+  hasSubmittedCharacter: boolean;
+  submittedCount: number;
+  totalCount: number;
+  players: CustomGuessWhoPlayerPayload[];
+};
+
 export type MimicaStartedPayload = {
   roomCode: string;
   matchId: string;
@@ -376,6 +445,102 @@ export type StopBackToLobbyNavPayload = {
   path: string;
 };
 
+export type TriviaStartedPayload = {
+  roomCode: string;
+  matchId: string;
+  path: string;
+};
+
+export type TriviaSubmitAnswerPayload = {
+  roomCode: string;
+  userId: string;
+  optionIndex: number;
+};
+
+export type TriviaHostActionPayload = {
+  roomCode: string;
+  userId: string;
+};
+
+export type TriviaThemePayload = {
+  id: string;
+  emoji: string;
+  label: string;
+};
+
+export type TriviaQuestionPayload = {
+  id: string;
+  question: string;
+  options: string[];
+};
+
+export type TriviaPlayerPayload = {
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  totalScore: number;
+  hasAnswered: boolean;
+};
+
+export type TriviaRevealPayload = {
+  correctIndex: number;
+  correctCount: number;
+  pointsByUserId: Record<string, number>;
+};
+
+export type TriviaRankingEntryPayload = {
+  position: number;
+  previousPosition: number | null;
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  totalScore: number;
+  correctCount: number;
+};
+
+export type TriviaFinalStatsPayload = {
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  totalScore: number;
+  correctCount: number;
+  accuracyPercent: number;
+  fastestCorrectMs: number | null;
+  bestStreak: number;
+  bestRoundScore: number;
+  bestTheme: TriviaThemePayload | null;
+};
+
+export type TriviaPhase =
+  | "wheel"
+  | "question"
+  | "reveal-answer"
+  | "ranking"
+  | "finished";
+
+export type TriviaStatePayload = {
+  roomCode: string;
+  matchId: string;
+  phase: TriviaPhase;
+  roundNumber: number;
+  totalRounds: number;
+  theme: TriviaThemePayload | null;
+  question: TriviaQuestionPayload | null;
+  phaseEndsAt: string | null;
+  isHost: boolean;
+  hasAnswered: boolean;
+  selectedOptionIndex: number | null;
+  players: TriviaPlayerPayload[];
+  reveal: TriviaRevealPayload | null;
+  ranking: TriviaRankingEntryPayload[] | null;
+  finalStats: TriviaFinalStatsPayload[] | null;
+};
+
+export type TriviaBackToLobbyNavPayload = {
+  roomCode: string;
+  path: string;
+};
+
 export type RoomErrorPayload = {
   message: string;
 };
@@ -393,6 +558,22 @@ export interface ClientToServerEvents {
   "impostor:play-again": (payload: ImpostorHostActionPayload) => void;
   "impostor:back-to-lobby": (payload: ImpostorHostActionPayload) => void;
   "guess-who:end-round": (payload: GuessWhoHostActionPayload) => void;
+  "quem-sou-eu-personalizado:start": (payload: StartGamePayload) => void;
+  "quem-sou-eu-personalizado:submit-character": (
+    payload: CustomGuessWhoSubmitCharacterPayload
+  ) => void;
+  "quem-sou-eu-personalizado:guess": (
+    payload: CustomGuessWhoGuessPayload
+  ) => void;
+  "quem-sou-eu-personalizado:vote": (
+    payload: CustomGuessWhoVotePayload
+  ) => void;
+  "quem-sou-eu-personalizado:cancel": (
+    payload: CustomGuessWhoHostActionPayload
+  ) => void;
+  "quem-sou-eu-personalizado:play-again": (
+    payload: CustomGuessWhoHostActionPayload
+  ) => void;
   "mimica:start": (payload: StartGamePayload) => void;
   "mimica:begin": (payload: MimicaBeginPayload) => void;
   "mimica:start-mime": (payload: MimicaPlayerActionPayload) => void;
@@ -406,6 +587,10 @@ export interface ClientToServerEvents {
   "stop:reveal-result": (payload: StopHostActionPayload) => void;
   "stop:next-round": (payload: StopHostActionPayload) => void;
   "stop:back-to-lobby": (payload: StopHostActionPayload) => void;
+  "trivia:start": (payload: StartGamePayload) => void;
+  "trivia:submit-answer": (payload: TriviaSubmitAnswerPayload) => void;
+  "trivia:next-match": (payload: TriviaHostActionPayload) => void;
+  "trivia:back-to-lobby": (payload: TriviaHostActionPayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -423,6 +608,15 @@ export interface ServerToClientEvents {
   "impostor:back-to-lobby": (payload: ImpostorBackToLobbyPayload) => void;
   "guess-who:started": (payload: GuessWhoStartedPayload) => void;
   "guess-who:state-updated": (payload: GuessWhoStatePayload) => void;
+  "quem-sou-eu-personalizado:started": (
+    payload: CustomGuessWhoStartedPayload
+  ) => void;
+  "quem-sou-eu-personalizado:state-updated": (
+    payload: CustomGuessWhoStatePayload
+  ) => void;
+  "quem-sou-eu-personalizado:back-to-lobby-nav": (
+    payload: CustomGuessWhoBackToLobbyPayload
+  ) => void;
   "mimica:started": (payload: MimicaStartedPayload) => void;
   "mimica:state-updated": (payload: MimicaStatePayload) => void;
   "mimica:private-word": (payload: MimicaPrivateWordPayload) => void;
@@ -430,6 +624,9 @@ export interface ServerToClientEvents {
   "stop:started": (payload: StopStartedPayload) => void;
   "stop:state-updated": (payload: StopStatePayload) => void;
   "stop:back-to-lobby-nav": (payload: StopBackToLobbyNavPayload) => void;
+  "trivia:started": (payload: TriviaStartedPayload) => void;
+  "trivia:state-updated": (payload: TriviaStatePayload) => void;
+  "trivia:back-to-lobby-nav": (payload: TriviaBackToLobbyNavPayload) => void;
   "room:error": (payload: RoomErrorPayload) => void;
 }
 

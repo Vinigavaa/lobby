@@ -235,7 +235,7 @@ export function MimicaGame({ code }: MimicaGameProps) {
                   ? ` · Rodada ${state.roundNumber}`
                   : ""}
               </p>
-              <h1 className="text-3xl font-black">Mimica</h1>
+              <h1 className="font-heading text-3xl font-black">Mimica</h1>
             </div>
             <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Drama className="size-6" />

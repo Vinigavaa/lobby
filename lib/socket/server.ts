@@ -1,6 +1,20 @@
 import type { Server as HttpServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 
+import {
+  buildCircularAssignments,
+  clearPendingGuesses,
+  countEligibleVoters,
+  countUnsolvedPlayers,
+  customGuessWhoCharacterMaxLength,
+  customGuessWhoGameType,
+  customGuessWhoMinimumPlayers,
+  isCustomGuessWhoMatchState,
+  nextSolvedOrder,
+  normalizeCustomGuessWhoText,
+  resolveGuessOutcome,
+  type CustomGuessWhoMatchState,
+} from "../custom-guess-who-engine";
 import { getRandomGuessWhoCards } from "../guess-who-cards";
 import {
   getRandomImpostorWord,
@@ -19,10 +33,32 @@ import {
 } from "../stop-categories";
 import { computeStopScores, drawStopLetter, rejectionKey } from "../stop-engine";
 import { prisma } from "../prisma";
+import {
+  applyTriviaRoundResult,
+  buildTriviaFinalStats,
+  buildTriviaRanking,
+  createTriviaPlayerStats,
+  drawNextTheme,
+  scoreTriviaAnswer,
+  updateFastestCorrect,
+  type TriviaPlayerStats,
+} from "../trivia-engine";
+import { getRandomTriviaQuestion } from "../trivia-questions";
+import {
+  getTriviaTheme,
+  triviaMinimumPlayers,
+  triviaQuestionSeconds,
+  triviaRankingMs,
+  triviaRevealAnswerMs,
+  triviaTotalRounds,
+  triviaWheelPhaseMs,
+  type TriviaThemeId,
+} from "../trivia-themes";
 import { SOCKET_PATH } from "./config";
 import { SOCKET_EVENTS } from "./events";
 import type {
   ClientToServerEvents,
+  CustomGuessWhoStatePayload,
   GamePayload,
   GameUpdatedPayload,
   GuessWhoStatePayload,
@@ -39,6 +75,8 @@ import type {
   StopRankingEntryPayload,
   StopReviewCategoryPayload,
   StopStatePayload,
+  TriviaStatePayload,
+  TriviaThemePayload,
 } from "./types";
 
 type InterServerEvents = Record<string, never>;
@@ -149,6 +187,11 @@ type GuessWhoMatchState = {
     };
   }>;
 };
+type ConnectedCustomGuessWhoPlayer = ConnectedImpostorPlayer;
+type CustomGuessWhoMutationResult =
+  | { error: string }
+  | { roomCode: string; matchId: string };
+
 type ConnectedMimicaPlayer = ConnectedImpostorPlayer;
 type MimicaMatchState = {
   phase: "setup" | "reveal" | "playing" | "roundResult";
@@ -205,6 +248,32 @@ type StopMutationResult =
 
 const stopTimerGraceMs = 1500;
 const stopTimers = new Map<string, NodeJS.Timeout>();
+
+type ConnectedTriviaPlayer = ConnectedImpostorPlayer;
+type TriviaAnswer = { optionIndex: number; answeredAt: string };
+type TriviaMatchState = {
+  phase: "wheel" | "question" | "reveal-answer" | "ranking" | "finished";
+  roundNumber: number;
+  themeBag: TriviaThemeId[];
+  usedQuestionIds: string[];
+  currentTheme: TriviaThemeId | null;
+  currentQuestion: {
+    id: string;
+    question: string;
+    options: string[];
+    correctIndex: number;
+  } | null;
+  phaseEndsAt: string | null;
+  answers: Record<string, TriviaAnswer | undefined>;
+  players: TriviaPlayerStats[];
+  previousRanking: string[] | null;
+  lastRoundPoints: Record<string, number> | null;
+  lastRoundCorrectCount: number | null;
+};
+type TriviaMutationResult = { error: string } | { roomCode: string; matchId: string };
+
+const triviaTimerGraceMs = 250;
+const triviaTimers = new Map<string, NodeJS.Timeout>();
 
 function pickImpostorPlayer(
   players: ConnectedImpostorPlayer[],
@@ -294,9 +363,15 @@ export function createSocketServer(httpServer: HttpServer) {
         await emitImpostorPrivateRole(socket, room.code, normalizedUserId);
         await emitImpostorReadyStateToSocket(socket, room.code);
         await emitGuessWhoStateToSocket(socket, room.code, normalizedUserId);
+        await emitCustomGuessWhoStateToSocket(
+          socket,
+          room.code,
+          normalizedUserId
+        );
         await emitMimicaStateToSocket(socket, room.code, normalizedUserId);
         await emitMimicaPrivateWordToSocket(socket, room.code, normalizedUserId);
         await emitStopStateToSocket(socket, room.code, normalizedUserId);
+        await emitTriviaStateToSocket(socket, room.code, normalizedUserId);
       } catch {
         socket.emit(SOCKET_EVENTS.ERROR, {
           message: "Nao foi possivel conectar na sala",
@@ -714,6 +789,235 @@ export function createSocketServer(httpServer: HttpServer) {
         });
       }
     });
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_START,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await startCustomGuessWhoMatch(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitRoomState(result.roomCode, result.matchId);
+          io?.to(result.roomCode).emit(SOCKET_EVENTS.CUSTOM_GUESS_WHO_STARTED, {
+            roomCode: result.roomCode,
+            matchId: result.matchId,
+            path: `/room/${result.roomCode}/${customGuessWhoGameType}`,
+          });
+          await emitCustomGuessWhoStates(result.roomCode, result.matchId);
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel iniciar a partida",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_SUBMIT_CHARACTER,
+      async ({ roomCode, userId, character }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+        const normalizedCharacter = normalizeCustomGuessWhoText(character);
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await submitCustomGuessWhoCharacter(
+            normalizedRoomCode,
+            normalizedUserId,
+            normalizedCharacter
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitCustomGuessWhoStates(result.roomCode, result.matchId);
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel enviar o personagem",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_GUESS,
+      async ({ roomCode, userId, guess }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+        const normalizedGuess = normalizeCustomGuessWhoText(guess);
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await submitCustomGuessWhoGuess(
+            normalizedRoomCode,
+            normalizedUserId,
+            normalizedGuess
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitCustomGuessWhoStates(result.roomCode, result.matchId);
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel enviar sua resposta",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_VOTE,
+      async ({ roomCode, userId, targetUserId, correct }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+        const normalizedTargetUserId =
+          typeof targetUserId === "string" ? targetUserId.trim() : "";
+
+        if (
+          !isValidRoomPayload(normalizedRoomCode, normalizedUserId) ||
+          !normalizedTargetUserId ||
+          typeof correct !== "boolean"
+        ) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Voto invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await submitCustomGuessWhoVote(
+            normalizedRoomCode,
+            normalizedUserId,
+            normalizedTargetUserId,
+            correct
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitCustomGuessWhoStates(result.roomCode, result.matchId);
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel registrar seu voto",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_CANCEL,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await backCustomGuessWhoRoomToLobby(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitRoomState(result.roomCode);
+          io?.to(result.roomCode).emit(
+            SOCKET_EVENTS.CUSTOM_GUESS_WHO_BACK_TO_LOBBY_NAV,
+            {
+              roomCode: result.roomCode,
+              path: `/room/${result.roomCode}`,
+            }
+          );
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel voltar ao lobby",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.CUSTOM_GUESS_WHO_PLAY_AGAIN,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await playAgainCustomGuessWho(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitRoomState(result.roomCode, result.matchId);
+          io?.to(result.roomCode).emit(SOCKET_EVENTS.CUSTOM_GUESS_WHO_STARTED, {
+            roomCode: result.roomCode,
+            matchId: result.matchId,
+            path: `/room/${result.roomCode}/${customGuessWhoGameType}`,
+          });
+          await emitCustomGuessWhoStates(result.roomCode, result.matchId);
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel iniciar nova partida",
+          });
+        }
+      }
+    );
 
     socket.on(SOCKET_EVENTS.MIMICA_START, async ({ roomCode, userId }) => {
       const normalizedRoomCode = normalizeRoomCode(roomCode);
@@ -1198,6 +1502,154 @@ export function createSocketServer(httpServer: HttpServer) {
         });
       }
     });
+
+    socket.on(SOCKET_EVENTS.TRIVIA_START, async ({ roomCode, userId }) => {
+      const normalizedRoomCode = normalizeRoomCode(roomCode);
+      const normalizedUserId = userId.trim();
+
+      if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Sala ou usuario invalido" });
+        return;
+      }
+
+      try {
+        const result = await startTriviaMatch(
+          normalizedRoomCode,
+          normalizedUserId
+        );
+
+        if ("error" in result) {
+          socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+          return;
+        }
+
+        await emitRoomState(result.roomCode, result.matchId);
+        io?.to(result.roomCode).emit(SOCKET_EVENTS.TRIVIA_STARTED, {
+          roomCode: result.roomCode,
+          matchId: result.matchId,
+          path: `/room/${result.roomCode}/trivia`,
+        });
+        await emitTriviaState(result.roomCode, result.matchId);
+      } catch {
+        socket.emit(SOCKET_EVENTS.ERROR, {
+          message: "Nao foi possivel iniciar a partida",
+        });
+      }
+    });
+
+    socket.on(
+      SOCKET_EVENTS.TRIVIA_SUBMIT_ANSWER,
+      async ({ roomCode, userId, optionIndex }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+        const normalizedOptionIndex = Number(optionIndex);
+
+        if (
+          !isValidRoomPayload(normalizedRoomCode, normalizedUserId) ||
+          !Number.isInteger(normalizedOptionIndex)
+        ) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala, usuario ou resposta invalida",
+          });
+          return;
+        }
+
+        try {
+          const result = await submitTriviaAnswer(
+            normalizedRoomCode,
+            normalizedUserId,
+            normalizedOptionIndex
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          if (result.allAnswered) {
+            await advanceTriviaPhase(result.matchId, result.roomCode);
+          } else {
+            await emitTriviaState(result.roomCode, result.matchId);
+          }
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel enviar a resposta",
+          });
+        }
+      }
+    );
+
+    socket.on(SOCKET_EVENTS.TRIVIA_NEXT_MATCH, async ({ roomCode, userId }) => {
+      const normalizedRoomCode = normalizeRoomCode(roomCode);
+      const normalizedUserId = userId.trim();
+
+      if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Sala ou usuario invalido" });
+        return;
+      }
+
+      try {
+        const result = await createNextTriviaMatch(
+          normalizedRoomCode,
+          normalizedUserId
+        );
+
+        if ("error" in result) {
+          socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+          return;
+        }
+
+        await emitRoomState(result.roomCode, result.matchId);
+        io?.to(result.roomCode).emit(SOCKET_EVENTS.TRIVIA_STARTED, {
+          roomCode: result.roomCode,
+          matchId: result.matchId,
+          path: `/room/${result.roomCode}/trivia`,
+        });
+        await emitTriviaState(result.roomCode, result.matchId);
+      } catch {
+        socket.emit(SOCKET_EVENTS.ERROR, {
+          message: "Nao foi possivel iniciar nova partida",
+        });
+      }
+    });
+
+    socket.on(
+      SOCKET_EVENTS.TRIVIA_BACK_TO_LOBBY,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await backTriviaRoomToLobby(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          clearTriviaTimer(result.matchId);
+          await emitRoomState(result.roomCode);
+          io?.to(result.roomCode).emit(SOCKET_EVENTS.TRIVIA_BACK_TO_LOBBY_NAV, {
+            roomCode: result.roomCode,
+            path: `/room/${result.roomCode}`,
+          });
+        } catch {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel voltar ao lobby",
+          });
+        }
+      }
+    );
 
     socket.on(
       SOCKET_EVENTS.GUESS_WHO_END_ROUND,
@@ -2103,6 +2555,571 @@ async function endGuessWhoRound(
       where: { id: match.id },
       data: {
         state: nextState,
+      },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+const customGuessWhoRoomSelect = {
+  id: true,
+  code: true,
+  status: true,
+  hostId: true,
+  selectedGame: {
+    select: gameSelect,
+  },
+  players: {
+    where: {
+      isConnected: true,
+    },
+    include: {
+      user: true,
+    },
+    orderBy: {
+      joinedAt: "asc",
+    },
+  },
+  matches: {
+    where: {
+      status: "playing",
+      endedAt: null,
+      game: {
+        is: {
+          type: customGuessWhoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    take: 1,
+    select: {
+      id: true,
+      state: true,
+    },
+  },
+} as const;
+
+function validateCustomGuessWhoStartRoom(
+  room: {
+    status: string;
+    hostId: string;
+    selectedGame: GamePayload | null;
+    players: unknown[];
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode iniciar a partida";
+  }
+
+  if (room.status !== "waiting") {
+    return "A partida ja foi iniciada";
+  }
+
+  if (!room.selectedGame) {
+    return "Escolha um jogo antes de iniciar";
+  }
+
+  if (room.selectedGame.type !== customGuessWhoGameType) {
+    return "O inicio desta partida esta disponivel apenas para Quem Sou Eu Personalizado";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  if (room.players.length < customGuessWhoMinimumPlayers) {
+    return `A partida precisa de pelo menos ${customGuessWhoMinimumPlayers} jogadores`;
+  }
+
+  return null;
+}
+
+function validateCustomGuessWhoHostActionRoom(
+  room: {
+    hostId: string;
+    selectedGame: GamePayload | null;
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode controlar a partida";
+  }
+
+  if (!room.selectedGame || room.selectedGame.type !== customGuessWhoGameType) {
+    return "Essa acao esta disponivel apenas para Quem Sou Eu Personalizado";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  return null;
+}
+
+function buildCustomGuessWhoState(
+  players: ConnectedCustomGuessWhoPlayer[]
+): CustomGuessWhoMatchState {
+  return {
+    phase: "writing",
+    startedAt: new Date().toISOString(),
+    playingStartedAt: null,
+    players: buildCircularAssignments(players),
+  };
+}
+
+async function startCustomGuessWhoMatch(
+  roomCode: string,
+  hostUserId: string
+): Promise<CustomGuessWhoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: customGuessWhoRoomSelect,
+    });
+    const validationError = validateCustomGuessWhoStartRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room || !room.selectedGame) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const state = buildCustomGuessWhoState(
+      room.players.map((player) => ({
+        userId: player.userId,
+        nickname: player.user.nickname,
+        avatar: player.user.avatar,
+      }))
+    );
+    const match = await tx.match.create({
+      data: {
+        roomId: room.id,
+        gameId: room.selectedGame.id,
+        status: "playing",
+        state,
+        startedAt: new Date(),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: {
+        status: "playing",
+      },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+function findActiveCustomGuessWhoMatch(
+  tx: SocketServerTransaction,
+  roomCode: string,
+  userId: string
+) {
+  return tx.match.findFirst({
+    where: {
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+        players: {
+          some: {
+            userId,
+          },
+        },
+      },
+      game: {
+        is: {
+          type: customGuessWhoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+        },
+      },
+    },
+  });
+}
+
+async function submitCustomGuessWhoCharacter(
+  roomCode: string,
+  userId: string,
+  character: string
+): Promise<CustomGuessWhoMutationResult> {
+  if (!character) {
+    return { error: "Escreva o nome do personagem" };
+  }
+
+  if (character.length > customGuessWhoCharacterMaxLength) {
+    return {
+      error: `O personagem deve ter no maximo ${customGuessWhoCharacterMaxLength} caracteres`,
+    };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const match = await findActiveCustomGuessWhoMatch(tx, roomCode, userId);
+
+    if (!match || !isCustomGuessWhoMatchState(match.state)) {
+      return { error: "Partida de Quem Sou Eu Personalizado nao encontrada" };
+    }
+
+    const state = match.state;
+
+    if (state.phase !== "writing") {
+      return { error: "A fase de escrita dos personagens ja terminou" };
+    }
+
+    const author = state.players.find((player) => player.userId === userId);
+
+    if (!author) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    if (author.writtenAt !== null) {
+      return { error: "Voce ja enviou o personagem e nao pode alterar" };
+    }
+
+    const writtenAt = new Date().toISOString();
+    const players = state.players.map((player) => {
+      if (player.userId === userId) {
+        return { ...player, writtenAt };
+      }
+
+      if (player.userId === author.writesForUserId) {
+        return { ...player, character };
+      }
+
+      return player;
+    });
+    const allWritten = players.every((player) => player.writtenAt !== null);
+    const nextState: CustomGuessWhoMatchState = {
+      ...state,
+      phase: allWritten ? "playing" : "writing",
+      playingStartedAt: allWritten ? writtenAt : state.playingStartedAt,
+      players,
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        state: nextState,
+      },
+    });
+
+    return { roomCode: match.room.code, matchId: match.id };
+  });
+}
+
+async function submitCustomGuessWhoGuess(
+  roomCode: string,
+  userId: string,
+  guess: string
+): Promise<CustomGuessWhoMutationResult> {
+  if (!guess) {
+    return { error: "Escreva quem voce acha que e" };
+  }
+
+  if (guess.length > customGuessWhoCharacterMaxLength) {
+    return {
+      error: `A resposta deve ter no maximo ${customGuessWhoCharacterMaxLength} caracteres`,
+    };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const match = await findActiveCustomGuessWhoMatch(tx, roomCode, userId);
+
+    if (!match || !isCustomGuessWhoMatchState(match.state)) {
+      return { error: "Partida de Quem Sou Eu Personalizado nao encontrada" };
+    }
+
+    const state = match.state;
+
+    if (state.phase !== "playing") {
+      return { error: "A partida nao esta em andamento" };
+    }
+
+    const player = state.players.find((item) => item.userId === userId);
+
+    if (!player) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    if (player.hasSolved) {
+      return { error: "Voce ja descobriu seu personagem" };
+    }
+
+    if (player.pendingGuess) {
+      return { error: "Sua resposta ja esta em votacao" };
+    }
+
+    const nextState: CustomGuessWhoMatchState = {
+      ...state,
+      players: state.players.map((item) =>
+        item.userId === userId
+          ? {
+              ...item,
+              pendingGuess: {
+                guess,
+                submittedAt: new Date().toISOString(),
+                votes: [],
+              },
+            }
+          : item
+      ),
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        state: nextState,
+      },
+    });
+
+    return { roomCode: match.room.code, matchId: match.id };
+  });
+}
+
+async function submitCustomGuessWhoVote(
+  roomCode: string,
+  voterUserId: string,
+  targetUserId: string,
+  correct: boolean
+): Promise<CustomGuessWhoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const match = await findActiveCustomGuessWhoMatch(tx, roomCode, voterUserId);
+
+    if (!match || !isCustomGuessWhoMatchState(match.state)) {
+      return { error: "Partida de Quem Sou Eu Personalizado nao encontrada" };
+    }
+
+    const state = match.state;
+
+    if (state.phase !== "playing") {
+      return { error: "A partida nao esta em andamento" };
+    }
+
+    if (voterUserId === targetUserId) {
+      return { error: "Voce nao pode votar na sua propria resposta" };
+    }
+
+    const voter = state.players.find((item) => item.userId === voterUserId);
+
+    if (!voter) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    const target = state.players.find((item) => item.userId === targetUserId);
+
+    if (!target || !target.pendingGuess) {
+      return { error: "Nao ha resposta em votacao para esse jogador" };
+    }
+
+    if (
+      target.pendingGuess.votes.some(
+        (vote) => vote.voterUserId === voterUserId
+      )
+    ) {
+      return { error: "Voce ja votou nessa resposta" };
+    }
+
+    const votes = [...target.pendingGuess.votes, { voterUserId, correct }];
+    const outcome = resolveGuessOutcome(
+      votes,
+      countEligibleVoters(state, targetUserId)
+    );
+    const solvedAt = new Date().toISOString();
+    const solvedOrder = nextSolvedOrder(state);
+    const players = state.players.map((item) => {
+      if (item.userId !== targetUserId || !item.pendingGuess) {
+        return item;
+      }
+
+      if (outcome === "pending") {
+        return { ...item, pendingGuess: { ...item.pendingGuess, votes } };
+      }
+
+      if (outcome === "rejected") {
+        return { ...item, pendingGuess: null };
+      }
+
+      return {
+        ...item,
+        pendingGuess: null,
+        hasSolved: true,
+        solvedAt,
+        solvedOrder,
+      };
+    });
+    const interimState: CustomGuessWhoMatchState = { ...state, players };
+    const isFinished = countUnsolvedPlayers(interimState) <= 1;
+    const nextState: CustomGuessWhoMatchState = isFinished
+      ? {
+          ...interimState,
+          phase: "finished",
+          players: clearPendingGuesses(players),
+        }
+      : interimState;
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        state: nextState,
+      },
+    });
+
+    return { roomCode: match.room.code, matchId: match.id };
+  });
+}
+
+/**
+ * Serve tanto para cancelar a partida em andamento quanto para sair da tela
+ * de resultado: em ambos os casos a sala volta a aguardar no lobby.
+ */
+async function backCustomGuessWhoRoomToLobby(
+  roomCode: string,
+  hostUserId: string
+): Promise<CustomGuessWhoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: customGuessWhoRoomSelect,
+    });
+    const validationError = validateCustomGuessWhoHostActionRoom(
+      room,
+      hostUserId
+    );
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const match = room.matches.at(0);
+
+    if (match) {
+      const isFinished =
+        isCustomGuessWhoMatchState(match.state) &&
+        match.state.phase === "finished";
+
+      await tx.match.update({
+        where: { id: match.id },
+        data: {
+          status: isFinished ? "finished" : "cancelled",
+          endedAt: new Date(),
+        },
+      });
+    }
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: {
+        status: "waiting",
+      },
+    });
+
+    return { roomCode: room.code, matchId: match?.id ?? "" };
+  });
+}
+
+async function playAgainCustomGuessWho(
+  roomCode: string,
+  hostUserId: string
+): Promise<CustomGuessWhoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: customGuessWhoRoomSelect,
+    });
+    const validationError = validateCustomGuessWhoHostActionRoom(
+      room,
+      hostUserId
+    );
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room || !room.selectedGame) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    if (room.players.length < customGuessWhoMinimumPlayers) {
+      return {
+        error: `A partida precisa de pelo menos ${customGuessWhoMinimumPlayers} jogadores`,
+      };
+    }
+
+    const previousMatch = room.matches.at(0);
+
+    if (
+      !previousMatch ||
+      !isCustomGuessWhoMatchState(previousMatch.state) ||
+      previousMatch.state.phase !== "finished"
+    ) {
+      return { error: "A partida atual ainda nao terminou" };
+    }
+
+    await tx.match.update({
+      where: { id: previousMatch.id },
+      data: {
+        status: "finished",
+        endedAt: new Date(),
+      },
+    });
+
+    const state = buildCustomGuessWhoState(
+      room.players.map((player) => ({
+        userId: player.userId,
+        nickname: player.user.nickname,
+        avatar: player.user.avatar,
+      }))
+    );
+    const match = await tx.match.create({
+      data: {
+        roomId: room.id,
+        gameId: room.selectedGame.id,
+        status: "playing",
+        state,
+        startedAt: new Date(),
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: {
+        status: "playing",
       },
     });
 
@@ -3849,6 +4866,806 @@ function isStopMatchState(state: unknown): state is StopMatchState {
   );
 }
 
+const triviaRoomSelect = {
+  id: true,
+  code: true,
+  status: true,
+  hostId: true,
+  selectedGame: {
+    select: gameSelect,
+  },
+  players: {
+    where: {
+      isConnected: true,
+    },
+    include: {
+      user: true,
+    },
+    orderBy: {
+      joinedAt: "asc",
+    },
+  },
+} as const;
+
+const triviaHostRoomSelect = {
+  id: true,
+  code: true,
+  status: true,
+  hostId: true,
+  selectedGame: {
+    select: gameSelect,
+  },
+  players: {
+    where: {
+      isConnected: true,
+    },
+    select: {
+      id: true,
+    },
+  },
+  matches: {
+    where: {
+      status: "playing",
+      endedAt: null,
+      game: {
+        is: {
+          type: "trivia",
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    take: 1,
+    select: {
+      id: true,
+      state: true,
+    },
+  },
+} as const;
+
+function validateTriviaStartRoom(
+  room: {
+    status: string;
+    hostId: string;
+    selectedGame: GamePayload | null;
+    players: unknown[];
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode iniciar a partida";
+  }
+
+  if (room.status !== "waiting") {
+    return "A partida ja foi iniciada";
+  }
+
+  if (!room.selectedGame) {
+    return "Escolha um jogo antes de iniciar";
+  }
+
+  if (room.selectedGame.type !== "trivia") {
+    return "O inicio desta partida esta disponivel apenas para Trivia";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  if (room.players.length < triviaMinimumPlayers) {
+    return `A partida precisa de pelo menos ${triviaMinimumPlayers} jogadores`;
+  }
+
+  return null;
+}
+
+function validateTriviaHostActionRoom(
+  room: {
+    hostId: string;
+    selectedGame: GamePayload | null;
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode controlar a partida";
+  }
+
+  if (!room.selectedGame || room.selectedGame.type !== "trivia") {
+    return "Essa acao esta disponivel apenas para Trivia";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  return null;
+}
+
+async function startTriviaMatch(
+  roomCode: string,
+  hostUserId: string
+): Promise<TriviaMutationResult> {
+  const initialRoom = await prisma.room.findUnique({
+    where: { code: roomCode },
+    select: triviaRoomSelect,
+  });
+  const validationError = validateTriviaStartRoom(initialRoom, hostUserId);
+
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  const { theme, remainingBag } = drawNextTheme([]);
+  const question = await getRandomTriviaQuestion(theme, []);
+
+  if (!question) {
+    return { error: "Nao ha perguntas ativas para iniciar o Trivia" };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: triviaRoomSelect,
+    });
+    const transactionValidationError = validateTriviaStartRoom(
+      room,
+      hostUserId
+    );
+
+    if (transactionValidationError) {
+      return { error: transactionValidationError };
+    }
+
+    if (!room || !room.selectedGame) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const players: ConnectedTriviaPlayer[] = room.players.map((player) => ({
+      userId: player.userId,
+      nickname: player.user.nickname,
+      avatar: player.user.avatar,
+    }));
+    const state: TriviaMatchState = {
+      phase: "wheel",
+      roundNumber: 1,
+      themeBag: remainingBag,
+      usedQuestionIds: [question.id],
+      currentTheme: theme,
+      currentQuestion: {
+        id: question.id,
+        question: question.question,
+        options: question.options,
+        correctIndex: question.correctIndex,
+      },
+      phaseEndsAt: new Date(Date.now() + triviaWheelPhaseMs).toISOString(),
+      answers: {},
+      players: players.map((player) => createTriviaPlayerStats(player)),
+      previousRanking: null,
+      lastRoundPoints: null,
+      lastRoundCorrectCount: null,
+    };
+
+    const match = await tx.match.create({
+      data: {
+        roomId: room.id,
+        gameId: room.selectedGame.id,
+        status: "playing",
+        state,
+        startedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: { status: "playing" },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+async function createNextTriviaMatch(
+  roomCode: string,
+  hostUserId: string
+): Promise<TriviaMutationResult> {
+  const { theme, remainingBag } = drawNextTheme([]);
+  const question = await getRandomTriviaQuestion(theme, []);
+
+  if (!question) {
+    return { error: "Nao ha perguntas ativas para iniciar o Trivia" };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: triviaHostRoomSelect,
+    });
+    const validationError = validateTriviaHostActionRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room || !room.selectedGame) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const previousMatch = room.matches.at(0);
+
+    if (previousMatch) {
+      await tx.match.update({
+        where: { id: previousMatch.id },
+        data: { status: "finished", endedAt: new Date() },
+      });
+    }
+
+    const connectedPlayers = await tx.roomPlayer.findMany({
+      where: { roomId: room.id, isConnected: true },
+      include: { user: true },
+      orderBy: { joinedAt: "asc" },
+    });
+    const players: ConnectedTriviaPlayer[] = connectedPlayers.map((player) => ({
+      userId: player.userId,
+      nickname: player.user.nickname,
+      avatar: player.user.avatar,
+    }));
+    const state: TriviaMatchState = {
+      phase: "wheel",
+      roundNumber: 1,
+      themeBag: remainingBag,
+      usedQuestionIds: [question.id],
+      currentTheme: theme,
+      currentQuestion: {
+        id: question.id,
+        question: question.question,
+        options: question.options,
+        correctIndex: question.correctIndex,
+      },
+      phaseEndsAt: new Date(Date.now() + triviaWheelPhaseMs).toISOString(),
+      answers: {},
+      players: players.map((player) => createTriviaPlayerStats(player)),
+      previousRanking: null,
+      lastRoundPoints: null,
+      lastRoundCorrectCount: null,
+    };
+
+    const match = await tx.match.create({
+      data: {
+        roomId: room.id,
+        gameId: room.selectedGame.id,
+        status: "playing",
+        state,
+        startedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: { status: "playing" },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+async function backTriviaRoomToLobby(
+  roomCode: string,
+  hostUserId: string
+): Promise<TriviaMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: triviaHostRoomSelect,
+    });
+    const validationError = validateTriviaHostActionRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const match = room.matches.at(0);
+
+    if (match) {
+      await tx.match.update({
+        where: { id: match.id },
+        data: { status: "finished", endedAt: new Date() },
+      });
+    }
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: { status: "waiting" },
+    });
+
+    return { roomCode: room.code, matchId: match?.id ?? "" };
+  });
+}
+
+function findActiveTriviaMatch(
+  tx: SocketServerTransaction,
+  roomCode: string,
+  userId: string
+) {
+  return tx.match.findFirst({
+    where: {
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+        players: {
+          some: {
+            userId,
+          },
+        },
+      },
+      game: {
+        is: {
+          type: "trivia",
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+        },
+      },
+    },
+  });
+}
+
+async function submitTriviaAnswer(
+  roomCode: string,
+  userId: string,
+  optionIndex: number
+): Promise<
+  | { error: string }
+  | { roomCode: string; matchId: string; allAnswered: boolean }
+> {
+  return prisma.$transaction(async (tx) => {
+    const match = await findActiveTriviaMatch(tx, roomCode, userId);
+
+    if (!match || !isTriviaMatchState(match.state)) {
+      return { error: "Partida de Trivia nao encontrada" };
+    }
+
+    const state = match.state;
+
+    if (state.phase !== "question") {
+      return { error: "Nao e possivel responder agora" };
+    }
+
+    if (
+      state.phaseEndsAt &&
+      new Date(state.phaseEndsAt).getTime() <= Date.now()
+    ) {
+      return { error: "O tempo desta pergunta acabou" };
+    }
+
+    if (!state.players.some((player) => player.userId === userId)) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    if (state.answers[userId]) {
+      return { roomCode: match.room.code, matchId: match.id, allAnswered: false };
+    }
+
+    if (
+      !state.currentQuestion ||
+      optionIndex < 0 ||
+      optionIndex >= state.currentQuestion.options.length
+    ) {
+      return { error: "Resposta invalida" };
+    }
+
+    const answers: TriviaMatchState["answers"] = {
+      ...state.answers,
+      [userId]: { optionIndex, answeredAt: new Date().toISOString() },
+    };
+    const allAnswered = state.players.every((player) =>
+      Boolean(answers[player.userId])
+    );
+    const nextState: TriviaMatchState = { ...state, answers };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { roomCode: match.room.code, matchId: match.id, allAnswered };
+  });
+}
+
+function resolveTriviaRoundScoring(state: TriviaMatchState): TriviaMatchState {
+  const theme = state.currentTheme;
+  const question = state.currentQuestion;
+  const questionStartMs = state.phaseEndsAt
+    ? new Date(state.phaseEndsAt).getTime() - triviaQuestionSeconds * 1000
+    : Date.now() - triviaQuestionSeconds * 1000;
+  const previousRanking = buildTriviaRanking(state.players).map(
+    (entry) => entry.userId
+  );
+  const pointsByUserId: Record<string, number> = {};
+  let correctCount = 0;
+
+  const nextPlayers = state.players.map((playerStats) => {
+    const answer = state.answers[playerStats.userId];
+    const isCorrect = Boolean(
+      question && answer && answer.optionIndex === question.correctIndex
+    );
+    const elapsedMs = answer
+      ? Math.max(0, new Date(answer.answeredAt).getTime() - questionStartMs)
+      : triviaQuestionSeconds * 1000;
+    const points = theme ? scoreTriviaAnswer(isCorrect, elapsedMs) : 0;
+
+    pointsByUserId[playerStats.userId] = points;
+
+    if (isCorrect) {
+      correctCount += 1;
+    }
+
+    let nextStats = applyTriviaRoundResult(playerStats, {
+      theme: theme ?? "variedades",
+      isCorrect,
+      answered: Boolean(answer),
+      points,
+    });
+
+    if (isCorrect) {
+      nextStats = updateFastestCorrect(nextStats, elapsedMs);
+    }
+
+    return nextStats;
+  });
+
+  return {
+    ...state,
+    phase: "reveal-answer",
+    players: nextPlayers,
+    previousRanking,
+    lastRoundPoints: pointsByUserId,
+    lastRoundCorrectCount: correctCount,
+    phaseEndsAt: new Date(Date.now() + triviaRevealAnswerMs).toISOString(),
+  };
+}
+
+async function advanceTriviaPhase(matchId: string, roomCode: string) {
+  clearTriviaTimer(matchId);
+
+  try {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      select: { id: true, state: true },
+    });
+
+    if (!match || !isTriviaMatchState(match.state)) {
+      return;
+    }
+
+    const state = match.state;
+    let nextState: TriviaMatchState;
+    let nextDelayMs: number | null = null;
+
+    if (state.phase === "wheel") {
+      nextState = {
+        ...state,
+        phase: "question",
+        phaseEndsAt: new Date(
+          Date.now() + triviaQuestionSeconds * 1000
+        ).toISOString(),
+      };
+      nextDelayMs = triviaQuestionSeconds * 1000;
+    } else if (state.phase === "question") {
+      nextState = resolveTriviaRoundScoring(state);
+      nextDelayMs = triviaRevealAnswerMs;
+    } else if (state.phase === "reveal-answer") {
+      nextState = {
+        ...state,
+        phase: "ranking",
+        phaseEndsAt: new Date(Date.now() + triviaRankingMs).toISOString(),
+      };
+      nextDelayMs = triviaRankingMs;
+    } else if (state.phase === "ranking") {
+      if (state.roundNumber >= triviaTotalRounds) {
+        nextState = { ...state, phase: "finished", phaseEndsAt: null };
+        nextDelayMs = null;
+      } else {
+        const { theme: nextTheme, remainingBag } = drawNextTheme(
+          state.themeBag
+        );
+        const question = await getRandomTriviaQuestion(
+          nextTheme,
+          state.usedQuestionIds
+        );
+
+        if (!question) {
+          return;
+        }
+
+        nextState = {
+          ...state,
+          phase: "wheel",
+          roundNumber: state.roundNumber + 1,
+          themeBag: remainingBag,
+          currentTheme: nextTheme,
+          currentQuestion: {
+            id: question.id,
+            question: question.question,
+            options: question.options,
+            correctIndex: question.correctIndex,
+          },
+          usedQuestionIds: [...state.usedQuestionIds, question.id],
+          answers: {},
+          lastRoundPoints: null,
+          lastRoundCorrectCount: null,
+          phaseEndsAt: new Date(
+            Date.now() + triviaWheelPhaseMs
+          ).toISOString(),
+        };
+        nextDelayMs = triviaWheelPhaseMs;
+      }
+    } else {
+      return;
+    }
+
+    await prisma.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+    await emitTriviaState(roomCode, matchId);
+
+    if (nextDelayMs !== null && nextState.phaseEndsAt) {
+      scheduleTriviaAdvance(matchId, roomCode, nextState.phaseEndsAt);
+    }
+  } catch {
+    return;
+  }
+}
+
+function scheduleTriviaAdvance(
+  matchId: string,
+  roomCode: string,
+  deadlineIso: string
+) {
+  clearTriviaTimer(matchId);
+
+  const delay =
+    new Date(deadlineIso).getTime() - Date.now() + triviaTimerGraceMs;
+  const timer = setTimeout(() => {
+    void advanceTriviaPhase(matchId, roomCode);
+  }, Math.max(0, delay));
+
+  triviaTimers.set(matchId, timer);
+}
+
+function clearTriviaTimer(matchId: string) {
+  const timer = triviaTimers.get(matchId);
+
+  if (timer) {
+    clearTimeout(timer);
+    triviaTimers.delete(matchId);
+  }
+}
+
+function buildTriviaThemePayload(
+  themeId: TriviaThemeId | null
+): TriviaThemePayload | null {
+  if (!themeId) {
+    return null;
+  }
+
+  const theme = getTriviaTheme(themeId);
+
+  return theme ? { id: theme.id, emoji: theme.emoji, label: theme.label } : null;
+}
+
+function toTriviaStatePayload(
+  roomCode: string,
+  matchId: string,
+  state: TriviaMatchState,
+  userId: string,
+  hostId: string
+): TriviaStatePayload {
+  const showOutcome =
+    state.phase === "reveal-answer" ||
+    state.phase === "ranking" ||
+    state.phase === "finished";
+
+  const ranking =
+    state.phase === "ranking" || state.phase === "finished"
+      ? buildTriviaRanking(state.players).map((entry) => {
+          const previousIndex = state.previousRanking
+            ? state.previousRanking.indexOf(entry.userId)
+            : -1;
+
+          return {
+            ...entry,
+            previousPosition: previousIndex === -1 ? null : previousIndex + 1,
+          };
+        })
+      : null;
+
+  const finalStats =
+    state.phase === "finished"
+      ? buildTriviaFinalStats(state.players, triviaTotalRounds).map((stat) => ({
+          ...stat,
+          bestTheme: buildTriviaThemePayload(stat.bestTheme),
+        }))
+      : null;
+
+  return {
+    roomCode,
+    matchId,
+    phase: state.phase,
+    roundNumber: state.roundNumber,
+    totalRounds: triviaTotalRounds,
+    theme: buildTriviaThemePayload(state.currentTheme),
+    question: state.currentQuestion
+      ? {
+          id: state.currentQuestion.id,
+          question: state.currentQuestion.question,
+          options: state.currentQuestion.options,
+        }
+      : null,
+    phaseEndsAt: state.phaseEndsAt,
+    isHost: hostId === userId,
+    hasAnswered: Boolean(state.answers[userId]),
+    selectedOptionIndex: state.answers[userId]?.optionIndex ?? null,
+    players: state.players.map((player) => ({
+      userId: player.userId,
+      nickname: player.nickname,
+      avatar: player.avatar,
+      totalScore: player.totalScore,
+      hasAnswered: Boolean(state.answers[player.userId]),
+    })),
+    reveal:
+      showOutcome && state.currentQuestion
+        ? {
+            correctIndex: state.currentQuestion.correctIndex,
+            correctCount: state.lastRoundCorrectCount ?? 0,
+            pointsByUserId: state.lastRoundPoints ?? {},
+          }
+        : null,
+    ranking,
+    finalStats,
+  };
+}
+
+async function getTriviaStatePayload(
+  roomCode: string,
+  userId: string,
+  matchId?: string
+): Promise<TriviaStatePayload | null> {
+  const match = await prisma.match.findFirst({
+    where: {
+      ...(matchId ? { id: matchId } : {}),
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+      },
+      game: {
+        is: {
+          type: "trivia",
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+          hostId: true,
+        },
+      },
+    },
+  });
+
+  if (!match || !isTriviaMatchState(match.state)) {
+    return null;
+  }
+
+  return toTriviaStatePayload(
+    match.room.code,
+    match.id,
+    match.state,
+    userId,
+    match.room.hostId
+  );
+}
+
+async function emitTriviaState(roomCode: string, matchId?: string) {
+  const sockets = await io?.in(roomCode).fetchSockets();
+
+  if (!sockets) {
+    return;
+  }
+
+  for (const roomSocket of sockets) {
+    const userId = roomSocket.data.userId;
+
+    if (!userId) {
+      continue;
+    }
+
+    const payload = await getTriviaStatePayload(roomCode, userId, matchId);
+
+    if (!payload) {
+      continue;
+    }
+
+    roomSocket.emit(SOCKET_EVENTS.TRIVIA_STATE_UPDATED, payload);
+
+    if (payload.phaseEndsAt && !triviaTimers.has(payload.matchId)) {
+      scheduleTriviaAdvance(payload.matchId, roomCode, payload.phaseEndsAt);
+    }
+  }
+}
+
+async function emitTriviaStateToSocket(
+  socket: RoleSocket,
+  roomCode: string,
+  userId: string
+) {
+  const payload = await getTriviaStatePayload(roomCode, userId);
+
+  if (!payload) {
+    return;
+  }
+
+  socket.emit(SOCKET_EVENTS.TRIVIA_STATE_UPDATED, payload);
+
+  if (payload.phaseEndsAt && !triviaTimers.has(payload.matchId)) {
+    scheduleTriviaAdvance(payload.matchId, roomCode, payload.phaseEndsAt);
+  }
+}
+
+function isTriviaMatchState(state: unknown): state is TriviaMatchState {
+  if (!state || typeof state !== "object") {
+    return false;
+  }
+
+  const candidate = state as Partial<TriviaMatchState>;
+
+  return (
+    (candidate.phase === "wheel" ||
+      candidate.phase === "question" ||
+      candidate.phase === "reveal-answer" ||
+      candidate.phase === "ranking" ||
+      candidate.phase === "finished") &&
+    typeof candidate.roundNumber === "number" &&
+    Array.isArray(candidate.themeBag) &&
+    Array.isArray(candidate.usedQuestionIds) &&
+    Array.isArray(candidate.players) &&
+    typeof candidate.answers === "object" &&
+    candidate.answers !== null
+  );
+}
+
 function validateImpostorStartRoom(
   room: {
     status: string;
@@ -4219,6 +6036,163 @@ async function getGuessWhoStatePayload(
             },
       };
     }),
+  };
+}
+
+async function emitCustomGuessWhoStates(roomCode: string, matchId?: string) {
+  const sockets = await io?.in(roomCode).fetchSockets();
+
+  if (!sockets) {
+    return;
+  }
+
+  for (const roomSocket of sockets) {
+    const userId = roomSocket.data.userId;
+
+    if (!userId) {
+      continue;
+    }
+
+    await emitCustomGuessWhoStateToSocket(roomSocket, roomCode, userId, matchId);
+  }
+}
+
+async function emitCustomGuessWhoStateToSocket(
+  socket: RoleSocket,
+  roomCode: string,
+  userId: string,
+  matchId?: string
+) {
+  const payload = await getCustomGuessWhoStatePayload(roomCode, userId, matchId);
+
+  if (!payload) {
+    return;
+  }
+
+  socket.emit(SOCKET_EVENTS.CUSTOM_GUESS_WHO_STATE_UPDATED, payload);
+}
+
+async function getCustomGuessWhoStatePayload(
+  roomCode: string,
+  userId: string,
+  matchId?: string
+): Promise<CustomGuessWhoStatePayload | null> {
+  const match = await prisma.match.findFirst({
+    where: {
+      ...(matchId ? { id: matchId } : {}),
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+      },
+      game: {
+        is: {
+          type: customGuessWhoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+          hostId: true,
+        },
+      },
+    },
+  });
+
+  if (!match || !isCustomGuessWhoMatchState(match.state)) {
+    return null;
+  }
+
+  const state = match.state;
+  const viewer = state.players.find((player) => player.userId === userId);
+
+  if (!viewer) {
+    return null;
+  }
+
+  const isFinished = state.phase === "finished";
+  const playingStartedAtMs = state.playingStartedAt
+    ? new Date(state.playingStartedAt).getTime()
+    : null;
+  const writesForPlayer = state.players.find(
+    (player) => player.userId === viewer.writesForUserId
+  );
+
+  return {
+    roomCode: match.room.code,
+    matchId: match.id,
+    phase: state.phase,
+    isHost: match.room.hostId === userId,
+    characterMaxLength: customGuessWhoCharacterMaxLength,
+    writesForNickname: writesForPlayer?.nickname ?? null,
+    hasSubmittedCharacter: viewer.writtenAt !== null,
+    submittedCount: state.players.filter((player) => player.writtenAt !== null)
+      .length,
+    totalCount: state.players.length,
+    players: state.players.map((player) => {
+      const isCurrentUser = player.userId === userId;
+      // O proprio personagem so aparece depois do acerto confirmado ou no fim.
+      const canSeeCharacter =
+        state.phase !== "writing" &&
+        (!isCurrentUser || player.hasSolved || isFinished);
+
+      return {
+        userId: player.userId,
+        nickname: player.nickname,
+        avatar: player.avatar,
+        isCurrentUser,
+        character: canSeeCharacter ? player.character : null,
+        hasSubmittedCharacter: player.writtenAt !== null,
+        hasSolved: player.hasSolved,
+        solvedOrder: player.solvedOrder,
+        solvedSeconds: toCustomGuessWhoSolvedSeconds(
+          player.solvedAt,
+          playingStartedAtMs
+        ),
+        pendingGuess: toCustomGuessWhoPendingGuessPayload(state, player, userId),
+      };
+    }),
+  };
+}
+
+function toCustomGuessWhoSolvedSeconds(
+  solvedAt: string | null,
+  playingStartedAtMs: number | null
+) {
+  if (!solvedAt || playingStartedAtMs === null) {
+    return null;
+  }
+
+  const elapsedMs = new Date(solvedAt).getTime() - playingStartedAtMs;
+
+  return Math.max(0, Math.round(elapsedMs / 1000));
+}
+
+function toCustomGuessWhoPendingGuessPayload(
+  state: CustomGuessWhoMatchState,
+  player: CustomGuessWhoMatchState["players"][number],
+  viewerUserId: string
+) {
+  if (!player.pendingGuess) {
+    return null;
+  }
+
+  const votes = player.pendingGuess.votes;
+  const myVote = votes.find((vote) => vote.voterUserId === viewerUserId);
+
+  return {
+    guess: player.pendingGuess.guess,
+    yesCount: votes.filter((vote) => vote.correct).length,
+    noCount: votes.filter((vote) => !vote.correct).length,
+    totalVoters: countEligibleVoters(state, player.userId),
+    myVote: myVote ? myVote.correct : null,
   };
 }
 

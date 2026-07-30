@@ -331,7 +331,7 @@ function SetupView({
           <Shuffle className="size-6" />
         </div>
         <div className="space-y-3">
-          <h1 className="text-4xl font-black leading-none tracking-normal">
+          <h1 className="font-heading text-4xl font-black leading-none tracking-normal">
             Impostor local
           </h1>
           <p className="max-w-sm text-base leading-7 text-muted-foreground">
@@ -508,7 +508,7 @@ function DiscussionView({ onRevealResult }: DiscussionViewProps) {
           <Shuffle className="size-6" />
         </div>
         <div className="space-y-3">
-          <h1 className="text-4xl font-black leading-none tracking-normal">
+          <h1 className="font-heading text-4xl font-black leading-none tracking-normal">
             Dicas em voz alta
           </h1>
           <p className="max-w-sm text-base leading-7 text-muted-foreground">
@@ -551,7 +551,7 @@ function ResultView({
           <Shuffle className="size-6" />
         </div>
         <div className="space-y-3">
-          <h1 className="text-4xl font-black leading-none tracking-normal">
+          <h1 className="font-heading text-4xl font-black leading-none tracking-normal">
             Resultado
           </h1>
           <p className="max-w-sm text-base leading-7 text-muted-foreground">
@@ -604,7 +604,7 @@ function PrivateStepShell({
       </div>
       <section className="space-y-6 rounded-lg border border-border bg-card p-5 text-center shadow-2xl shadow-black/25">
         <div className="space-y-3">
-          <h1 className="text-3xl font-black leading-tight tracking-normal">
+          <h1 className="font-heading text-3xl font-black leading-tight tracking-normal">
             {title}
           </h1>
           <p className="text-sm leading-6 text-muted-foreground">

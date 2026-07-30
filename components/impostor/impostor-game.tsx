@@ -276,7 +276,7 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
               <p className="text-sm font-medium text-muted-foreground">
                 Sala {code}
               </p>
-              <h1 className="text-3xl font-black">Impostor</h1>
+              <h1 className="font-heading text-3xl font-black">Impostor</h1>
             </div>
             <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <Gamepad2 className="size-6" />

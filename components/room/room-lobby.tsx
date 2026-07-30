@@ -17,10 +17,20 @@ import { Button } from "@/components/ui/button";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
 import type { GamePayload, RoomPlayerPayload } from "@/lib/socket/types";
+import {
+  customGuessWhoGameType,
+  customGuessWhoMinimumPlayers,
+} from "@/lib/custom-guess-who-engine";
+import { triviaMinimumPlayers } from "@/lib/trivia-themes";
 import { cn } from "@/lib/utils";
 
 const userIdKey = "partyroom:user-id";
 const impostorRoleKey = "partyroom:impostor-role";
+const defaultMinimumPlayers = 3;
+const minimumPlayersByGameType: Record<string, number> = {
+  trivia: triviaMinimumPlayers,
+  [customGuessWhoGameType]: customGuessWhoMinimumPlayers,
+};
 
 type RoomLobbyProps = {
   code: string;
@@ -58,15 +68,18 @@ export function RoomLobby({
     [currentUserId, players]
   );
   const isHost = Boolean(currentPlayer?.isHost);
+  const minimumPlayersForGame = selectedGame
+    ? minimumPlayersByGameType[selectedGame.type] ?? defaultMinimumPlayers
+    : defaultMinimumPlayers;
   const canStartGame =
     isHost &&
     roomStatus === "waiting" &&
     Boolean(selectedGame) &&
-    connectedCount >= 3;
+    connectedCount >= minimumPlayersForGame;
   const startDisabledReason = !selectedGame
     ? "Escolha um jogo para iniciar."
-    : connectedCount < 3
-      ? "A partida precisa de pelo menos 3 jogadores."
+    : connectedCount < minimumPlayersForGame
+      ? `A partida precisa de pelo menos ${minimumPlayersForGame} jogadores.`
       : roomStatus !== "waiting"
         ? "A partida ja foi iniciada."
         : "";
@@ -130,6 +143,12 @@ export function RoomLobby({
         }
       });
 
+      socket.on(SOCKET_EVENTS.CUSTOM_GUESS_WHO_STARTED, (payload) => {
+        if (payload.roomCode === code) {
+          router.push(payload.path);
+        }
+      });
+
       socket.on(SOCKET_EVENTS.MIMICA_STARTED, (payload) => {
         if (payload.roomCode === code) {
           router.push(payload.path);
@@ -137,6 +156,12 @@ export function RoomLobby({
       });
 
       socket.on(SOCKET_EVENTS.STOP_STARTED, (payload) => {
+        if (payload.roomCode === code) {
+          router.push(payload.path);
+        }
+      });
+
+      socket.on(SOCKET_EVENTS.TRIVIA_STARTED, (payload) => {
         if (payload.roomCode === code) {
           router.push(payload.path);
         }
@@ -182,6 +207,14 @@ export function RoomLobby({
       return;
     }
 
+    if (selectedGame?.type === customGuessWhoGameType) {
+      socketRef.current?.emit(SOCKET_EVENTS.CUSTOM_GUESS_WHO_START, {
+        roomCode: code,
+        userId: currentUserId,
+      });
+      return;
+    }
+
     if (selectedGame?.type === "mimica") {
       socketRef.current?.emit(SOCKET_EVENTS.MIMICA_START, {
         roomCode: code,
@@ -192,6 +225,14 @@ export function RoomLobby({
 
     if (selectedGame?.type === "stop") {
       socketRef.current?.emit(SOCKET_EVENTS.STOP_START, {
+        roomCode: code,
+        userId: currentUserId,
+      });
+      return;
+    }
+
+    if (selectedGame?.type === "trivia") {
+      socketRef.current?.emit(SOCKET_EVENTS.TRIVIA_START, {
         roomCode: code,
         userId: currentUserId,
       });
@@ -235,7 +276,7 @@ export function RoomLobby({
               <p className="text-sm font-medium text-muted-foreground">
                 Sala PartyRoom
               </p>
-              <h1 className="font-mono text-5xl font-black tracking-[0.14em]">
+              <h1 className="font-heading text-5xl font-black tracking-[0.06em]">
                 {code}
               </h1>
             </div>

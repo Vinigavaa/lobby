@@ -1,20 +1,21 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Hash, LogIn, Sparkles } from "lucide-react";
+import { ArrowLeft, LogIn } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 const avatarOptions = ["🎲", "🎮", "🪩", "🚀", "🧠", "🎭"];
 const nicknameKey = "partyroom:nickname";
 const avatarKey = "partyroom:avatar";
 const userIdKey = "partyroom:user-id";
+const codeLength = 6;
 
 export function JoinContent() {
   const router = useRouter();
@@ -23,6 +24,7 @@ export function JoinContent() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const digitRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -62,19 +64,26 @@ export function JoinContent() {
     }
   }
 
-  function selectAvatar(value: string) {
-    setAvatar(value);
+  function updateCode(value: string) {
+    setCode(value.replace(/\D/g, "").slice(0, codeLength));
+    setError("");
+  }
 
-    try {
-      localStorage.setItem(avatarKey, value);
-    } catch {
-      return;
+  function handleDigitChange(index: number, value: string) {
+    const digit = value.replace(/\D/g, "").slice(-1);
+    const nextDigits = Array.from({ length: codeLength }, (_, i) => code[i] ?? "");
+    nextDigits[index] = digit;
+    updateCode(nextDigits.join(""));
+
+    if (digit && index < codeLength - 1) {
+      digitRefs.current[index + 1]?.focus();
     }
   }
 
-  function updateCode(value: string) {
-    setCode(value.replace(/\D/g, "").slice(0, 6));
-    setError("");
+  function handleDigitKeyDown(index: number, event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Backspace" && !code[index] && index > 0) {
+      digitRefs.current[index - 1]?.focus();
+    }
   }
 
   function validateFields() {
@@ -141,106 +150,104 @@ export function JoinContent() {
 
   return (
     <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col justify-center">
-        <motion.form
-          onSubmit={handleSubmit}
-          className="space-y-6 rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/25"
-          initial={{ opacity: 0, y: 18, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col">
+        <Button
+          asChild
+          variant="secondary"
+          size="icon"
+          className="mt-2 rounded-full border border-border"
+        >
+          <Link href="/" aria-label="Voltar para inicio">
+            <ArrowLeft className="size-4" />
+          </Link>
+        </Button>
+
+        <motion.div
+          className="flex flex-1 flex-col items-center justify-center gap-7 py-8"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <div className="flex items-center justify-between">
-            <Button asChild variant="ghost" size="icon">
-              <Link href="/" aria-label="Voltar para inicio">
-                <ArrowLeft className="size-4" />
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm font-medium text-accent">
-              <Sparkles className="size-4" />
-              PartyRoom
+          <div className="flex flex-col items-center gap-1.5 text-center">
+            <div className="relative mb-1 size-[52px] overflow-hidden rounded-2xl">
+              <Image src="/logo.png" alt="PartyRoom" fill className="object-cover" priority />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex size-12 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Hash className="size-6" />
-            </div>
-            <h1 className="text-3xl font-black">Entrar em sala</h1>
-            <p className="text-sm leading-6 text-muted-foreground">
-              Digite seu apelido e o codigo enviado pelo host.
+            <h1 className="font-heading text-2xl font-black">Entrar em sala</h1>
+            <p className="text-[13.5px] leading-6 text-muted-foreground">
+              Peca o codigo de {codeLength} digitos
+              <br />
+              pra quem criou a sala
             </p>
           </div>
 
-          <div className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="join-nickname">Nickname</Label>
+          <form onSubmit={handleSubmit} className="w-full space-y-5">
+            <div className="space-y-3.5 rounded-[20px] border border-border bg-card p-5">
+              <div className="grid grid-cols-6 gap-2.5">
+                {Array.from({ length: codeLength }, (_, index) => code[index] ?? "").map(
+                  (digit, index) => (
+                    <div key={index} className="relative aspect-[13/16] w-full">
+                      <input
+                        ref={(element) => {
+                          digitRefs.current[index] = element;
+                        }}
+                        value={digit}
+                        onChange={(event) => handleDigitChange(index, event.target.value)}
+                        onKeyDown={(event) => handleDigitKeyDown(index, event)}
+                        inputMode="numeric"
+                        maxLength={1}
+                        aria-label={`Digito ${index + 1} do codigo`}
+                        aria-invalid={Boolean(error && code.length !== codeLength)}
+                        className={cn(
+                          "size-full rounded-xl border bg-muted text-center text-2xl font-black text-foreground transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
+                          digit ? "border-2 border-primary" : "border-border"
+                        )}
+                      />
+                      {!digit ? (
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center text-muted-foreground/60">
+                          •
+                        </span>
+                      ) : null}
+                    </div>
+                  )
+                )}
+              </div>
+
               <Input
                 id="join-nickname"
                 value={nickname}
                 onChange={(event) => updateNickname(event.target.value)}
-                placeholder="Seu nome no jogo"
+                placeholder="Como seus amigos te chamam?"
                 autoComplete="nickname"
                 maxLength={24}
                 aria-invalid={Boolean(error && !nickname.trim())}
-                className="h-12 bg-background text-base"
+                className="h-12 rounded-xl border-border bg-muted text-base"
               />
             </div>
 
-            <div className="space-y-3">
-              <Label>Avatar</Label>
-              <div className="grid grid-cols-6 gap-2">
-                {avatarOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => selectAvatar(option)}
-                    aria-label={`Usar avatar ${option}`}
-                    aria-pressed={avatar === option}
-                    className={cn(
-                      "flex aspect-square items-center justify-center rounded-md border bg-background text-2xl transition hover:border-accent hover:bg-accent/10 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
-                      avatar === option
-                        ? "border-accent bg-accent text-accent-foreground shadow-lg shadow-accent/15"
-                        : "border-border"
-                    )}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {error ? (
+              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
 
-            <div className="space-y-2">
-              <Label htmlFor="room-code">Codigo da sala</Label>
-              <Input
-                id="room-code"
-                value={code}
-                onChange={(event) => updateCode(event.target.value)}
-                placeholder="000000"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                aria-invalid={Boolean(error && code.length !== 6)}
-                className="h-14 bg-background text-center font-mono text-2xl tracking-[0.25em]"
-              />
-            </div>
-          </div>
+            <Button
+              type="submit"
+              size="lg"
+              className="h-14 w-full gap-2 rounded-[14px] text-base"
+              disabled={isJoining}
+            >
+              <LogIn className="size-4" />
+              {isJoining ? "Entrando..." : "Entrar"}
+            </Button>
 
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
+            <p className="text-center text-[12.5px] text-muted-foreground/70">
+              Nao tem um codigo?{" "}
+              <Link href="/" className="font-bold text-accent">
+                Criar sala
+              </Link>
             </p>
-          ) : null}
-
-          <Button
-            type="submit"
-            size="lg"
-            className="h-12 w-full gap-2"
-            disabled={isJoining}
-          >
-            <LogIn className="size-4" />
-            {isJoining ? "Entrando..." : "Entrar"}
-          </Button>
-        </motion.form>
+          </form>
+        </motion.div>
       </section>
     </main>
   );
