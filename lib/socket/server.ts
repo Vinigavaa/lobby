@@ -17,6 +17,17 @@ import {
 } from "../custom-guess-who-engine";
 import { getRandomGuessWhoCards } from "../guess-who-cards";
 import {
+  applyPalpiteCertoRoundResult,
+  createPalpiteCertoPlayerStats,
+  palpiteCertoGameType,
+  palpiteCertoMinimumPlayers,
+  scorePalpiteCertoRound,
+  sortPalpiteCertoRanking,
+  type PalpiteCertoPlayerStats,
+  type PalpiteCertoRoundResult,
+} from "../palpite-certo-engine";
+import { getRandomGuessNumberQuestion } from "../palpite-certo-questions";
+import {
   getRandomImpostorWord,
   getRandomImpostorWordExcept,
 } from "../impostor-words";
@@ -69,6 +80,7 @@ import type {
   ImpostorTurnChangedPayload,
   ImpostorVotesUpdatedPayload,
   MimicaStatePayload,
+  PalpiteCertoStatePayload,
   PlayersUpdatedPayload,
   ServerToClientEvents,
   SocketData,
@@ -219,7 +231,7 @@ type MimicaMutationResult =
   | { error: string }
   | { roomCode: string; matchId: string };
 
-const mimicaRandomCategory = "Aleatória";
+const mimicaRandomCategory = "AleatÃ³ria";
 const mimicaDurationOptions = [30, 60];
 const mimicaTimers = new Map<string, NodeJS.Timeout>();
 
@@ -271,6 +283,31 @@ type TriviaMatchState = {
   lastRoundCorrectCount: number | null;
 };
 type TriviaMutationResult = { error: string } | { roomCode: string; matchId: string };
+
+type ConnectedPalpiteCertoPlayer = ConnectedImpostorPlayer;
+type PalpiteCertoGuess = { value: number; submittedAt: string };
+/**
+ * `correctValue` vive apenas aqui, no estado do servidor. O payload enviado
+ * ao cliente so passa a inclui-lo na fase de revelacao.
+ */
+type PalpiteCertoMatchState = {
+  phase: "question" | "reveal" | "finished";
+  roundNumber: number;
+  usedQuestionIds: string[];
+  currentQuestion: {
+    id: string;
+    text: string;
+    correctValue: number;
+    unit: string | null;
+    emoji: string | null;
+  } | null;
+  guesses: Record<string, PalpiteCertoGuess | undefined>;
+  players: PalpiteCertoPlayerStats[];
+  lastRoundResults: PalpiteCertoRoundResult[] | null;
+};
+type PalpiteCertoMutationResult =
+  | { error: string }
+  | { roomCode: string; matchId: string };
 
 const triviaTimerGraceMs = 250;
 const triviaTimers = new Map<string, NodeJS.Timeout>();
@@ -388,6 +425,11 @@ export function createSocketServer(httpServer: HttpServer) {
         await emitMimicaPrivateWordToSocket(socket, room.code, normalizedUserId);
         await emitStopStateToSocket(socket, room.code, normalizedUserId);
         await emitTriviaStateToSocket(socket, room.code, normalizedUserId);
+        await emitPalpiteCertoStateToSocket(
+          socket,
+          room.code,
+          normalizedUserId
+        );
       } catch {
         socket.emit(SOCKET_EVENTS.ERROR, {
           message: "Nao foi possivel conectar na sala",
@@ -1695,6 +1737,249 @@ export function createSocketServer(httpServer: HttpServer) {
         } catch {
           socket.emit(SOCKET_EVENTS.ERROR, {
             message: "Nao foi possivel encerrar a rodada",
+          });
+        }
+      }
+    );
+
+    socket.on(SOCKET_EVENTS.PALPITE_CERTO_START, async ({ roomCode, userId }) => {
+      const normalizedRoomCode = normalizeRoomCode(roomCode);
+      const normalizedUserId = userId.trim();
+
+      if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+        socket.emit(SOCKET_EVENTS.ERROR, { message: "Sala ou usuario invalido" });
+        return;
+      }
+
+      try {
+        const result = await startPalpiteCertoMatch(
+          normalizedRoomCode,
+          normalizedUserId
+        );
+
+        if ("error" in result) {
+          socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+          return;
+        }
+
+        await emitRoomState(result.roomCode, result.matchId);
+        io?.to(result.roomCode).emit(SOCKET_EVENTS.PALPITE_CERTO_STARTED, {
+          roomCode: result.roomCode,
+          matchId: result.matchId,
+          path: `/room/${result.roomCode}/palpite-certo`,
+        });
+        await emitPalpiteCertoState(result.roomCode, result.matchId);
+      } catch (error) {
+        console.error(
+          `[palpite-certo] Falha ao iniciar partida na sala ${normalizedRoomCode}`,
+          error
+        );
+        socket.emit(SOCKET_EVENTS.ERROR, {
+          message: "Nao foi possivel iniciar a partida",
+        });
+      }
+    });
+
+    socket.on(
+      SOCKET_EVENTS.PALPITE_CERTO_SUBMIT_GUESS,
+      async ({ roomCode, userId, value }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+        const normalizedValue = Number(value);
+
+        // O campo do cliente ja filtra nao-digitos, mas a regra vive aqui:
+        // nenhum palpite entra no estado sem ser um inteiro finito.
+        if (
+          !isValidRoomPayload(normalizedRoomCode, normalizedUserId) ||
+          !Number.isFinite(normalizedValue) ||
+          !Number.isInteger(normalizedValue)
+        ) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala, usuario ou palpite invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await submitPalpiteCertoGuess(
+            normalizedRoomCode,
+            normalizedUserId,
+            normalizedValue
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitPalpiteCertoState(result.roomCode, result.matchId);
+        } catch (error) {
+          console.error(
+            `[palpite-certo] Falha ao registrar palpite na sala ${normalizedRoomCode}`,
+            error
+          );
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel enviar o palpite",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.PALPITE_CERTO_REVEAL,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await revealPalpiteCertoRound(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitPalpiteCertoState(result.roomCode, result.matchId);
+        } catch (error) {
+          console.error(
+            `[palpite-certo] Falha ao revelar rodada na sala ${normalizedRoomCode}`,
+            error
+          );
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel mostrar os resultados",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.PALPITE_CERTO_NEXT_QUESTION,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await nextPalpiteCertoQuestion(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitPalpiteCertoState(result.roomCode, result.matchId);
+        } catch (error) {
+          console.error(
+            `[palpite-certo] Falha ao sortear nova pergunta na sala ${normalizedRoomCode}`,
+            error
+          );
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel sortear a proxima pergunta",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.PALPITE_CERTO_END_MATCH,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          // Encerra mostrando o ranking final antes de liberar a sala, para
+          // ninguem ser jogado ao lobby sem ver o resultado da partida.
+          const finishResult = await finishPalpiteCertoMatch(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in finishResult) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: finishResult.error });
+            return;
+          }
+
+          await emitPalpiteCertoState(
+            finishResult.roomCode,
+            finishResult.matchId
+          );
+        } catch (error) {
+          console.error(
+            `[palpite-certo] Falha ao encerrar partida na sala ${normalizedRoomCode}`,
+            error
+          );
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel encerrar a partida",
+          });
+        }
+      }
+    );
+
+    socket.on(
+      SOCKET_EVENTS.PALPITE_CERTO_BACK_TO_LOBBY,
+      async ({ roomCode, userId }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Sala ou usuario invalido",
+          });
+          return;
+        }
+
+        try {
+          const result = await backPalpiteCertoRoomToLobby(
+            normalizedRoomCode,
+            normalizedUserId
+          );
+
+          if ("error" in result) {
+            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
+            return;
+          }
+
+          await emitRoomState(result.roomCode);
+          io?.to(result.roomCode).emit(
+            SOCKET_EVENTS.PALPITE_CERTO_BACK_TO_LOBBY_NAV,
+            {
+              roomCode: result.roomCode,
+              path: `/room/${result.roomCode}`,
+            }
+          );
+        } catch (error) {
+          console.error(
+            `[palpite-certo] Falha ao voltar ao lobby na sala ${normalizedRoomCode}`,
+            error
+          );
+          socket.emit(SOCKET_EVENTS.ERROR, {
+            message: "Nao foi possivel voltar ao lobby",
           });
         }
       }
@@ -6623,3 +6908,750 @@ async function emitRoomState(roomCode: string, activeMatchId?: string | null) {
   io?.to(room.code).emit(SOCKET_EVENTS.HOST_UPDATED, hostUpdatedPayload);
   io?.to(room.code).emit(SOCKET_EVENTS.GAME_UPDATED, gameUpdatedPayload);
 }
+
+const palpiteCertoRoomSelect = {
+  id: true,
+  code: true,
+  status: true,
+  hostId: true,
+  selectedGame: {
+    select: gameSelect,
+  },
+  players: {
+    where: {
+      isConnected: true,
+    },
+    include: {
+      user: true,
+    },
+    orderBy: {
+      joinedAt: "asc",
+    },
+  },
+} as const;
+
+const palpiteCertoHostRoomSelect = {
+  id: true,
+  code: true,
+  status: true,
+  hostId: true,
+  selectedGame: {
+    select: gameSelect,
+  },
+  matches: {
+    where: {
+      status: "playing",
+      endedAt: null,
+      game: {
+        is: {
+          type: palpiteCertoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    take: 1,
+    select: {
+      id: true,
+      state: true,
+    },
+  },
+} as const;
+
+function isPalpiteCertoMatchState(
+  state: unknown
+): state is PalpiteCertoMatchState {
+  if (!state || typeof state !== "object") {
+    return false;
+  }
+
+  const candidate = state as Partial<PalpiteCertoMatchState>;
+
+  return (
+    (candidate.phase === "question" ||
+      candidate.phase === "reveal" ||
+      candidate.phase === "finished") &&
+    typeof candidate.roundNumber === "number" &&
+    Array.isArray(candidate.usedQuestionIds) &&
+    Array.isArray(candidate.players) &&
+    typeof candidate.guesses === "object" &&
+    candidate.guesses !== null
+  );
+}
+
+function validatePalpiteCertoStartRoom(
+  room: {
+    status: string;
+    hostId: string;
+    selectedGame: GamePayload | null;
+    players: unknown[];
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode iniciar a partida";
+  }
+
+  if (room.status !== "waiting") {
+    return "A partida ja foi iniciada";
+  }
+
+  if (!room.selectedGame) {
+    return "Escolha um jogo antes de iniciar";
+  }
+
+  if (room.selectedGame.type !== palpiteCertoGameType) {
+    return "O inicio desta partida esta disponivel apenas para o Palpite Certo";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  if (room.players.length < palpiteCertoMinimumPlayers) {
+    return `A partida precisa de pelo menos ${palpiteCertoMinimumPlayers} jogadores`;
+  }
+
+  return null;
+}
+
+function validatePalpiteCertoHostActionRoom(
+  room: {
+    hostId: string;
+    selectedGame: GamePayload | null;
+  } | null,
+  hostUserId: string
+) {
+  if (!room) {
+    return "Sala nao encontrada";
+  }
+
+  if (room.hostId !== hostUserId) {
+    return "Apenas o host pode controlar a partida";
+  }
+
+  if (!room.selectedGame || room.selectedGame.type !== palpiteCertoGameType) {
+    return "Essa acao esta disponivel apenas para o Palpite Certo";
+  }
+
+  if (!room.selectedGame.isActive) {
+    return "O jogo selecionado ainda nao esta disponivel";
+  }
+
+  return null;
+}
+
+async function startPalpiteCertoMatch(
+  roomCode: string,
+  hostUserId: string
+): Promise<PalpiteCertoMutationResult> {
+  const initialRoom = await prisma.room.findUnique({
+    where: { code: roomCode },
+    select: palpiteCertoRoomSelect,
+  });
+  const validationError = validatePalpiteCertoStartRoom(initialRoom, hostUserId);
+
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  const draw = await getRandomGuessNumberQuestion([]);
+
+  if (!draw) {
+    return { error: "Nao ha perguntas ativas para iniciar o Palpite Certo" };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: palpiteCertoRoomSelect,
+    });
+    const transactionValidationError = validatePalpiteCertoStartRoom(
+      room,
+      hostUserId
+    );
+
+    if (transactionValidationError) {
+      return { error: transactionValidationError };
+    }
+
+    if (!room || !room.selectedGame) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const players: ConnectedPalpiteCertoPlayer[] = room.players.map(
+      (player) => ({
+        userId: player.userId,
+        nickname: player.user.nickname,
+        avatar: player.user.avatar,
+      })
+    );
+    const state: PalpiteCertoMatchState = {
+      phase: "question",
+      roundNumber: 1,
+      usedQuestionIds: [draw.question.id],
+      currentQuestion: {
+        id: draw.question.id,
+        text: draw.question.question,
+        correctValue: draw.question.correctValue,
+        unit: draw.question.unit,
+        emoji: draw.question.emoji,
+      },
+      guesses: {},
+      players: players.map((player) => createPalpiteCertoPlayerStats(player)),
+      lastRoundResults: null,
+    };
+
+    const match = await tx.match.create({
+      data: {
+        roomId: room.id,
+        gameId: room.selectedGame.id,
+        status: "playing",
+        state,
+        startedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: { status: "playing" },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+function findActivePalpiteCertoMatch(
+  tx: SocketServerTransaction,
+  roomCode: string,
+  userId: string
+) {
+  return tx.match.findFirst({
+    where: {
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+        players: {
+          some: {
+            userId,
+          },
+        },
+      },
+      game: {
+        is: {
+          type: palpiteCertoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Le o estado da partida travando a linha ate o fim da transacao.
+ *
+ * `FOR UPDATE` faz transacoes concorrentes esperarem em vez de lerem a mesma
+ * versao do JSON, que e o que garante que nenhum palpite simultaneo se perca.
+ */
+async function lockPalpiteCertoMatchState(
+  tx: SocketServerTransaction,
+  matchId: string
+): Promise<PalpiteCertoMatchState | null> {
+  const rows = await tx.$queryRaw<
+    { state: unknown }[]
+  >`SELECT state FROM "Match" WHERE id = ${matchId} FOR UPDATE`;
+  const state = rows.at(0)?.state;
+
+  return isPalpiteCertoMatchState(state) ? state : null;
+}
+
+async function submitPalpiteCertoGuess(
+  roomCode: string,
+  userId: string,
+  value: number
+): Promise<PalpiteCertoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const match = await findActivePalpiteCertoMatch(tx, roomCode, userId);
+
+    if (!match || !isPalpiteCertoMatchState(match.state)) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    // O estado da partida e um unico JSON, entao gravar um palpite e um
+    // read-modify-write. Como todos palpitam ao mesmo tempo, sem travar a
+    // linha duas confirmacoes simultaneas leem o mesmo estado e a segunda
+    // sobrescreve a primeira, perdendo um palpite. O lock serializa isso.
+    const state = await lockPalpiteCertoMatchState(tx, match.id);
+
+    if (!state) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    if (state.phase !== "question") {
+      return { error: "Nao e possivel palpitar agora" };
+    }
+
+    if (!state.players.some((player) => player.userId === userId)) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    // Palpite confirmado e definitivo: reenvio nao altera o valor original.
+    if (state.guesses[userId]) {
+      return { roomCode: match.room.code, matchId: match.id };
+    }
+
+    const nextState: PalpiteCertoMatchState = {
+      ...state,
+      guesses: {
+        ...state.guesses,
+        [userId]: { value, submittedAt: new Date().toISOString() },
+      },
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { roomCode: match.room.code, matchId: match.id };
+  });
+}
+
+/**
+ * Jogadores que ainda contam como pendentes na rodada.
+ *
+ * Quem se desconectou sem palpitar nao pode travar a revelacao, entao sai da
+ * contagem. O jogador continua no ranking: a pontuacao usa `state.players`.
+ */
+async function findPendingPalpiteCertoPlayers(
+  tx: SocketServerTransaction,
+  roomId: string,
+  state: PalpiteCertoMatchState
+) {
+  const connectedPlayers = await tx.roomPlayer.findMany({
+    where: { roomId, isConnected: true },
+    select: { userId: true },
+  });
+  const connectedUserIds = new Set(
+    connectedPlayers.map((player) => player.userId)
+  );
+
+  return state.players.filter(
+    (player) =>
+      connectedUserIds.has(player.userId) && !state.guesses[player.userId]
+  );
+}
+
+async function revealPalpiteCertoRound(
+  roomCode: string,
+  hostUserId: string
+): Promise<PalpiteCertoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: palpiteCertoHostRoomSelect,
+    });
+    const validationError = validatePalpiteCertoHostActionRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    const match = room?.matches.at(0);
+
+    if (!room || !match || !isPalpiteCertoMatchState(match.state)) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    // Trava a linha para nao apurar sobre um estado ja desatualizado por um
+    // palpite que entrou no mesmo instante.
+    const state = await lockPalpiteCertoMatchState(tx, match.id);
+
+    if (!state) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    if (state.phase !== "question") {
+      return { error: "A rodada ja foi revelada" };
+    }
+
+    if (!state.currentQuestion) {
+      return { error: "Nao ha pergunta ativa nesta rodada" };
+    }
+
+    const pending = await findPendingPalpiteCertoPlayers(tx, room.id, state);
+
+    if (pending.length > 0) {
+      return { error: "Ainda ha jogadores sem palpite confirmado" };
+    }
+
+    const results = scorePalpiteCertoRound(
+      collectPalpiteCertoGuesses(state),
+      state.currentQuestion.correctValue,
+      state.players
+    );
+    const nextState: PalpiteCertoMatchState = {
+      ...state,
+      phase: "reveal",
+      players: applyPalpiteCertoRoundResult(state.players, results),
+      lastRoundResults: results,
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+function collectPalpiteCertoGuesses(state: PalpiteCertoMatchState) {
+  return Object.entries(state.guesses).flatMap(([userId, guess]) =>
+    guess
+      ? [
+          {
+            userId,
+            value: guess.value,
+            submittedAt: new Date(guess.submittedAt).getTime(),
+          },
+        ]
+      : []
+  );
+}
+
+async function nextPalpiteCertoQuestion(
+  roomCode: string,
+  hostUserId: string
+): Promise<PalpiteCertoMutationResult> {
+  const room = await prisma.room.findUnique({
+    where: { code: roomCode },
+    select: palpiteCertoHostRoomSelect,
+  });
+  const validationError = validatePalpiteCertoHostActionRoom(room, hostUserId);
+
+  if (validationError) {
+    return { error: validationError };
+  }
+
+  const currentMatch = room?.matches.at(0);
+
+  if (!room || !currentMatch || !isPalpiteCertoMatchState(currentMatch.state)) {
+    return { error: "Partida de Palpite Certo nao encontrada" };
+  }
+
+  const draw = await getRandomGuessNumberQuestion(
+    currentMatch.state.usedQuestionIds
+  );
+
+  if (!draw) {
+    // Banco sem perguntas ativas: encerra em vez de deixar a sala presa.
+    return finishPalpiteCertoMatch(roomCode, hostUserId);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const match = await tx.match.findUnique({
+      where: { id: currentMatch.id },
+      select: { id: true, status: true, state: true },
+    });
+
+    if (
+      !match ||
+      match.status !== "playing" ||
+      !isPalpiteCertoMatchState(match.state)
+    ) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    const state = match.state;
+    // Ciclo reiniciado: o historico volta a zero para as perguntas ficarem
+    // ineditas de novo a partir da que acabou de ser sorteada.
+    const usedQuestionIds = draw.cycleRestarted
+      ? [draw.question.id]
+      : [...state.usedQuestionIds, draw.question.id];
+    const nextState: PalpiteCertoMatchState = {
+      ...state,
+      phase: "question",
+      roundNumber: state.roundNumber + 1,
+      usedQuestionIds,
+      currentQuestion: {
+        id: draw.question.id,
+        text: draw.question.question,
+        correctValue: draw.question.correctValue,
+        unit: draw.question.unit,
+        emoji: draw.question.emoji,
+      },
+      guesses: {},
+      lastRoundResults: null,
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { roomCode, matchId: match.id };
+  });
+}
+
+async function finishPalpiteCertoMatch(
+  roomCode: string,
+  hostUserId: string
+): Promise<PalpiteCertoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: palpiteCertoHostRoomSelect,
+    });
+    const validationError = validatePalpiteCertoHostActionRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    const match = room?.matches.at(0);
+
+    if (!room || !match || !isPalpiteCertoMatchState(match.state)) {
+      return { error: "Partida de Palpite Certo nao encontrada" };
+    }
+
+    const nextState: PalpiteCertoMatchState = {
+      ...match.state,
+      phase: "finished",
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { roomCode: room.code, matchId: match.id };
+  });
+}
+
+async function backPalpiteCertoRoomToLobby(
+  roomCode: string,
+  hostUserId: string
+): Promise<PalpiteCertoMutationResult> {
+  return prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { code: roomCode },
+      select: palpiteCertoHostRoomSelect,
+    });
+    const validationError = validatePalpiteCertoHostActionRoom(room, hostUserId);
+
+    if (validationError) {
+      return { error: validationError };
+    }
+
+    if (!room) {
+      return { error: "Sala nao encontrada" };
+    }
+
+    const match = room.matches.at(0);
+
+    if (match) {
+      await tx.match.update({
+        where: { id: match.id },
+        data: { status: "finished", endedAt: new Date() },
+      });
+    }
+
+    await tx.room.update({
+      where: { id: room.id },
+      data: { status: "waiting" },
+    });
+
+    return { roomCode: room.code, matchId: match?.id ?? "" };
+  });
+}
+
+/**
+ * Monta o payload de um destinatario especifico.
+ *
+ * O sigilo dos palpites e garantia do servidor, nao da interface: fora da
+ * revelacao o payload nao carrega `correctValue` nem palpite de terceiros, so
+ * o do proprio destinatario e a contagem de quem ja respondeu.
+ */
+function toPalpiteCertoStatePayload(
+  roomCode: string,
+  matchId: string,
+  state: PalpiteCertoMatchState,
+  userId: string,
+  hostId: string,
+  connectedUserIds: Set<string>
+): PalpiteCertoStatePayload {
+  const isRevealed = state.phase === "reveal" || state.phase === "finished";
+  const nicknameByUserId = new Map(
+    state.players.map((player) => [player.userId, player])
+  );
+  const activePlayers = state.players.filter((player) =>
+    connectedUserIds.has(player.userId)
+  );
+  const answeredCount = activePlayers.filter(
+    (player) => state.guesses[player.userId]
+  ).length;
+  const ownGuess = state.guesses[userId];
+
+  return {
+    roomCode,
+    matchId,
+    phase: state.phase,
+    roundNumber: state.roundNumber,
+    question: state.currentQuestion
+      ? {
+          id: state.currentQuestion.id,
+          text: state.currentQuestion.text,
+          unit: state.currentQuestion.unit,
+          emoji: state.currentQuestion.emoji,
+        }
+      : null,
+    correctValue: isRevealed
+      ? (state.currentQuestion?.correctValue ?? null)
+      : null,
+    isHost: hostId === userId,
+    hasGuessed: Boolean(ownGuess),
+    ownGuess: ownGuess?.value ?? null,
+    answeredCount,
+    totalPlayers: activePlayers.length,
+    canReveal:
+      state.phase === "question" &&
+      activePlayers.length > 0 &&
+      answeredCount === activePlayers.length,
+    players: state.players.map((player) => ({
+      userId: player.userId,
+      nickname: player.nickname,
+      avatar: player.avatar,
+      totalScore: player.totalScore,
+      hasGuessed: Boolean(state.guesses[player.userId]),
+    })),
+    roundResults:
+      isRevealed && state.lastRoundResults
+        ? state.lastRoundResults.map((result) => ({
+            position: result.position,
+            userId: result.userId,
+            nickname: nicknameByUserId.get(result.userId)?.nickname ?? "Jogador",
+            avatar: nicknameByUserId.get(result.userId)?.avatar ?? null,
+            guess: result.guess,
+            difference: result.difference,
+            points: result.points,
+          }))
+        : null,
+    ranking: sortPalpiteCertoRanking(state.players).map((entry) => ({
+      position: entry.position,
+      userId: entry.player.userId,
+      nickname: entry.player.nickname,
+      avatar: entry.player.avatar,
+      totalScore: entry.player.totalScore,
+    })),
+  };
+}
+
+async function getPalpiteCertoStatePayload(
+  roomCode: string,
+  userId: string,
+  matchId?: string
+): Promise<PalpiteCertoStatePayload | null> {
+  const match = await prisma.match.findFirst({
+    where: {
+      ...(matchId ? { id: matchId } : {}),
+      status: "playing",
+      endedAt: null,
+      room: {
+        code: roomCode,
+      },
+      game: {
+        is: {
+          type: palpiteCertoGameType,
+        },
+      },
+    },
+    orderBy: {
+      startedAt: "desc",
+    },
+    select: {
+      id: true,
+      state: true,
+      room: {
+        select: {
+          code: true,
+          hostId: true,
+          players: {
+            where: { isConnected: true },
+            select: { userId: true },
+          },
+        },
+      },
+    },
+  });
+
+  if (!match || !isPalpiteCertoMatchState(match.state)) {
+    return null;
+  }
+
+  return toPalpiteCertoStatePayload(
+    match.room.code,
+    match.id,
+    match.state,
+    userId,
+    match.room.hostId,
+    new Set(match.room.players.map((player) => player.userId))
+  );
+}
+
+async function emitPalpiteCertoState(roomCode: string, matchId?: string) {
+  const sockets = await io?.in(roomCode).fetchSockets();
+
+  if (!sockets) {
+    return;
+  }
+
+  for (const roomSocket of sockets) {
+    const userId = roomSocket.data.userId;
+
+    if (!userId) {
+      continue;
+    }
+
+    const payload = await getPalpiteCertoStatePayload(roomCode, userId, matchId);
+
+    if (!payload) {
+      continue;
+    }
+
+    roomSocket.emit(SOCKET_EVENTS.PALPITE_CERTO_STATE_UPDATED, payload);
+  }
+}
+
+async function emitPalpiteCertoStateToSocket(
+  socket: RoleSocket,
+  roomCode: string,
+  userId: string
+) {
+  const payload = await getPalpiteCertoStatePayload(roomCode, userId);
+
+  if (!payload) {
+    return;
+  }
+
+  socket.emit(SOCKET_EVENTS.PALPITE_CERTO_STATE_UPDATED, payload);
+}
+

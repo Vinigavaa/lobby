@@ -132,3 +132,16 @@ model TriviaQuestion {
   @@index([isActive])
   @@index([difficulty])
 }
+
+model GuessNumberQuestion {
+  id           String   @id @default(cuid())
+  question     String   @unique
+  correctValue Float
+  unit         String?
+  emoji        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isActive])
+}

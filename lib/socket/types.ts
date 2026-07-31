@@ -547,6 +547,91 @@ export type TriviaBackToLobbyNavPayload = {
   path: string;
 };
 
+export type PalpiteCertoStartedPayload = {
+  roomCode: string;
+  matchId: string;
+  path: string;
+};
+
+export type PalpiteCertoSubmitGuessPayload = {
+  roomCode: string;
+  userId: string;
+  value: number;
+};
+
+export type PalpiteCertoHostActionPayload = {
+  roomCode: string;
+  userId: string;
+};
+
+export type PalpiteCertoQuestionPayload = {
+  id: string;
+  text: string;
+  unit: string | null;
+  emoji: string | null;
+};
+
+export type PalpiteCertoPlayerPayload = {
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  totalScore: number;
+  hasGuessed: boolean;
+};
+
+export type PalpiteCertoRoundResultPayload = {
+  position: number;
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  guess: number | null;
+  difference: number | null;
+  points: number;
+};
+
+export type PalpiteCertoRankingEntryPayload = {
+  position: number;
+  userId: string;
+  nickname: string;
+  avatar: string | null;
+  totalScore: number;
+};
+
+/**
+ * `reveal` cobre contador animado, resposta correta e ranking da rodada: sao
+ * etapas de uma mesma animacao no cliente, e separa-las em duas fases de
+ * servidor obrigaria o host a um clique extra sem nada acontecer entre elas.
+ */
+export type PalpiteCertoPhase = "question" | "reveal" | "finished";
+
+export type PalpiteCertoStatePayload = {
+  roomCode: string;
+  matchId: string;
+  phase: PalpiteCertoPhase;
+  roundNumber: number;
+  question: PalpiteCertoQuestionPayload | null;
+  /**
+   * Preenchido apenas nas fases de revelacao. Antes disso o servidor omite o
+   * valor, para que o cliente nunca receba dado que ainda nao pode mostrar.
+   */
+  correctValue: number | null;
+  isHost: boolean;
+  hasGuessed: boolean;
+  /** Apenas o proprio palpite do destinatario; nunca o de terceiros. */
+  ownGuess: number | null;
+  answeredCount: number;
+  totalPlayers: number;
+  canReveal: boolean;
+  players: PalpiteCertoPlayerPayload[];
+  roundResults: PalpiteCertoRoundResultPayload[] | null;
+  ranking: PalpiteCertoRankingEntryPayload[];
+};
+
+export type PalpiteCertoBackToLobbyNavPayload = {
+  roomCode: string;
+  path: string;
+};
+
 export type RoomErrorPayload = {
   message: string;
 };
@@ -597,6 +682,18 @@ export interface ClientToServerEvents {
   "trivia:submit-answer": (payload: TriviaSubmitAnswerPayload) => void;
   "trivia:next-match": (payload: TriviaHostActionPayload) => void;
   "trivia:back-to-lobby": (payload: TriviaHostActionPayload) => void;
+  "palpite-certo:start": (payload: StartGamePayload) => void;
+  "palpite-certo:submit-guess": (
+    payload: PalpiteCertoSubmitGuessPayload
+  ) => void;
+  "palpite-certo:reveal": (payload: PalpiteCertoHostActionPayload) => void;
+  "palpite-certo:next-question": (
+    payload: PalpiteCertoHostActionPayload
+  ) => void;
+  "palpite-certo:end-match": (payload: PalpiteCertoHostActionPayload) => void;
+  "palpite-certo:back-to-lobby": (
+    payload: PalpiteCertoHostActionPayload
+  ) => void;
 }
 
 export interface ServerToClientEvents {
@@ -633,6 +730,11 @@ export interface ServerToClientEvents {
   "trivia:started": (payload: TriviaStartedPayload) => void;
   "trivia:state-updated": (payload: TriviaStatePayload) => void;
   "trivia:back-to-lobby-nav": (payload: TriviaBackToLobbyNavPayload) => void;
+  "palpite-certo:started": (payload: PalpiteCertoStartedPayload) => void;
+  "palpite-certo:state-updated": (payload: PalpiteCertoStatePayload) => void;
+  "palpite-certo:back-to-lobby-nav": (
+    payload: PalpiteCertoBackToLobbyNavPayload
+  ) => void;
   "room:error": (payload: RoomErrorPayload) => void;
 }
 

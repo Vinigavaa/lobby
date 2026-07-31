@@ -43,9 +43,15 @@ export default async function RoomPage({ params }: RoomPageProps) {
   }
 
   const gameOrder = new Map(
-    ["impostor", "quem-sou-eu", "mimica", "stop", "trivia", "cidade-dorme"].map(
-      (type, index) => [type, index]
-    )
+    [
+      "impostor",
+      "quem-sou-eu",
+      "mimica",
+      "stop",
+      "trivia",
+      "palpite-certo",
+      "cidade-dorme",
+    ].map((type, index) => [type, index])
   );
 
   const orderedGames: GamePayload[] = games

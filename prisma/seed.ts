@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import type { Prisma } from "../generated/prisma/client";
 import { PrismaClient } from "../generated/prisma/client";
 import { mimicaWordsData } from "../lib/mimica-words-data";
+import { palpiteCertoQuestionsData } from "../lib/palpite-certo-questions-data";
 import { triviaQuestionsData } from "../lib/trivia-questions-data";
 
 const adapter = new PrismaPg({
@@ -48,6 +49,12 @@ const games = [
     type: "trivia",
     name: "Trivia",
     description: "Responda perguntas e dispute pontos com os outros jogadores.",
+    isActive: true,
+  },
+  {
+    type: "palpite-certo",
+    name: "Palpite Certo",
+    description: "Chute o numero mais proximo da resposta certa e dispute o topo do ranking.",
     isActive: true,
   },
   {
@@ -493,6 +500,25 @@ async function main() {
         },
       });
     }
+  }
+
+  for (const item of palpiteCertoQuestionsData) {
+    await prisma.guessNumberQuestion.upsert({
+      where: { question: item.question },
+      create: {
+        question: item.question,
+        correctValue: item.correctValue,
+        unit: item.unit,
+        emoji: item.emoji,
+        isActive: true,
+      },
+      update: {
+        correctValue: item.correctValue,
+        unit: item.unit,
+        emoji: item.emoji,
+        isActive: true,
+      },
+    });
   }
 }
 

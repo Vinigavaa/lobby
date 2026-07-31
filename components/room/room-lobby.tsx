@@ -21,6 +21,10 @@ import {
   customGuessWhoGameType,
   customGuessWhoMinimumPlayers,
 } from "@/lib/custom-guess-who-engine";
+import {
+  palpiteCertoGameType,
+  palpiteCertoMinimumPlayers,
+} from "@/lib/palpite-certo-engine";
 import { triviaMinimumPlayers } from "@/lib/trivia-themes";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +33,7 @@ const impostorRoleKey = "partyroom:impostor-role";
 const defaultMinimumPlayers = 3;
 const minimumPlayersByGameType: Record<string, number> = {
   trivia: triviaMinimumPlayers,
+  [palpiteCertoGameType]: palpiteCertoMinimumPlayers,
   [customGuessWhoGameType]: customGuessWhoMinimumPlayers,
 };
 
@@ -167,6 +172,12 @@ export function RoomLobby({
         }
       });
 
+      socket.on(SOCKET_EVENTS.PALPITE_CERTO_STARTED, (payload) => {
+        if (payload.roomCode === code) {
+          router.push(payload.path);
+        }
+      });
+
       socket.on(SOCKET_EVENTS.ERROR, (payload) => {
         setError(payload.message);
       });
@@ -233,6 +244,14 @@ export function RoomLobby({
 
     if (selectedGame?.type === "trivia") {
       socketRef.current?.emit(SOCKET_EVENTS.TRIVIA_START, {
+        roomCode: code,
+        userId: currentUserId,
+      });
+      return;
+    }
+
+    if (selectedGame?.type === palpiteCertoGameType) {
+      socketRef.current?.emit(SOCKET_EVENTS.PALPITE_CERTO_START, {
         roomCode: code,
         userId: currentUserId,
       });
