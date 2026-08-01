@@ -526,7 +526,9 @@ function SetupPhase({
                 aria-checked={checked}
                 onClick={() => onToggleCategory(category.key)}
                 className={cn(
-                  "flex items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition",
+                  // min-h-11: a lista de categorias e o unico ponto do setup
+                  // em que se toca varias vezes seguidas.
+                  "flex min-h-11 items-center gap-3 rounded-md border px-3 py-2.5 text-left text-sm transition",
                   "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                   checked
                     ? "border-primary bg-primary/10"
