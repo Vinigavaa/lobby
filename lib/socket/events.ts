@@ -37,7 +37,6 @@ export const SOCKET_EVENTS = {
   TRIVIA_BACK_TO_LOBBY: "trivia:back-to-lobby",
   PALPITE_CERTO_START: "palpite-certo:start",
   PALPITE_CERTO_SUBMIT_GUESS: "palpite-certo:submit-guess",
-  PALPITE_CERTO_REVEAL: "palpite-certo:reveal",
   PALPITE_CERTO_NEXT_QUESTION: "palpite-certo:next-question",
   PALPITE_CERTO_END_MATCH: "palpite-certo:end-match",
   PALPITE_CERTO_BACK_TO_LOBBY: "palpite-certo:back-to-lobby",

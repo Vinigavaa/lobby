@@ -12,7 +12,6 @@ import {
   SkipForward,
   Sparkles,
   Target,
-  Trophy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -124,7 +123,6 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
 
   function emitHostAction(
     event:
-      | typeof SOCKET_EVENTS.PALPITE_CERTO_REVEAL
       | typeof SOCKET_EVENTS.PALPITE_CERTO_NEXT_QUESTION
       | typeof SOCKET_EVENTS.PALPITE_CERTO_END_MATCH
       | typeof SOCKET_EVENTS.PALPITE_CERTO_BACK_TO_LOBBY
@@ -142,9 +140,11 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
   }
 
   return (
-    <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col justify-between gap-6">
-        <div className="space-y-5">
+    // `dvh` em vez de `vh`: no celular a barra do navegador entra na conta de
+    // `100vh` e a base da tela fica fora da area visivel.
+    <main className="min-h-dvh bg-background text-foreground">
+      <section className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 px-5 py-6">
+        <div className="flex-1 space-y-5">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-muted-foreground">
               Sala {code}
@@ -213,16 +213,28 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
             <PalpiteCertoRanking ranking={state.ranking} />
           ) : null}
 
+          {state && !isHost && phase !== "question" ? (
+            <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent">
+              Aguardando o host escolher o proximo passo...
+            </p>
+          ) : null}
+        </div>
+
+        {/*
+          Barra fixa na base: no celular a pagina fica mais alta que a tela e,
+          no fluxo normal, os botoes do host so ficavam alcancaveis com a
+          pagina rolada ate o fim.
+        */}
+        <div
+          className={cn(
+            "sticky bottom-0 -mx-5 space-y-2.5 border-t border-border bg-background px-5 pt-3",
+            "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+          )}
+        >
           {state ? (
             <HostControls
               phase={phase}
               isHost={isHost}
-              canReveal={state.canReveal}
-              answeredCount={state.answeredCount}
-              totalPlayers={state.totalPlayers}
-              onReveal={() =>
-                emitHostAction(SOCKET_EVENTS.PALPITE_CERTO_REVEAL)
-              }
               onNextQuestion={() =>
                 emitHostAction(SOCKET_EVENTS.PALPITE_CERTO_NEXT_QUESTION)
               }
@@ -234,18 +246,18 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
               }
             />
           ) : null}
-        </div>
 
-        <Button
-          type="button"
-          size="lg"
-          variant="secondary"
-          className="h-12 gap-2 rounded-[14px] border border-border"
-          onClick={leaveGame}
-        >
-          <LogOut className="size-4" />
-          Sair
-        </Button>
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="h-12 w-full gap-2 rounded-[14px] border border-border"
+            onClick={leaveGame}
+          >
+            <LogOut className="size-4" />
+            Sair
+          </Button>
+        </div>
       </section>
     </main>
   );
@@ -368,32 +380,24 @@ function QuestionPhase({
 type HostControlsProps = {
   phase: PalpiteCertoStatePayload["phase"];
   isHost: boolean;
-  canReveal: boolean;
-  answeredCount: number;
-  totalPlayers: number;
-  onReveal: () => void;
   onNextQuestion: () => void;
   onEndMatch: () => void;
   onBackToLobby: () => void;
 };
 
+/**
+ * Controles do host. A revelacao e automatica (o servidor muda de fase quando
+ * o ultimo palpite entra), entao aqui so restam avancar e encerrar.
+ */
 function HostControls({
   phase,
   isHost,
-  canReveal,
-  answeredCount,
-  totalPlayers,
-  onReveal,
   onNextQuestion,
   onEndMatch,
   onBackToLobby,
 }: HostControlsProps) {
   if (!isHost) {
-    return phase === "reveal" || phase === "finished" ? (
-      <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent">
-        Aguardando o host escolher o proximo passo...
-      </p>
-    ) : null;
+    return null;
   }
 
   if (phase === "finished") {
@@ -410,9 +414,9 @@ function HostControls({
     );
   }
 
-  if (phase === "reveal") {
-    return (
-      <div className="grid gap-2.5">
+  return (
+    <div className="grid gap-2.5">
+      {phase === "reveal" ? (
         <Button
           type="button"
           size="lg"
@@ -422,34 +426,7 @@ function HostControls({
           <SkipForward className="size-4" />
           Proxima Pergunta
         </Button>
-        <Button
-          type="button"
-          size="lg"
-          variant="secondary"
-          className="h-12 gap-2 rounded-[14px] border border-border"
-          onClick={onEndMatch}
-        >
-          <Flag className="size-4" />
-          Encerrar partida
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-2.5">
-      <Button
-        type="button"
-        size="lg"
-        disabled={!canReveal}
-        className="h-14 gap-2 rounded-[14px]"
-        onClick={onReveal}
-      >
-        <Trophy className="size-4" />
-        {canReveal
-          ? "Mostrar Resultados"
-          : `Faltam ${totalPlayers - answeredCount} palpites`}
-      </Button>
+      ) : null}
       <Button
         type="button"
         size="lg"

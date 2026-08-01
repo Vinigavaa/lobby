@@ -18,7 +18,8 @@ pessoa, que e exatamente o publico do Looby.
   `reveal` (contagem animada + resposta correta) -> `ranking` da rodada.
 - Palpites ficam ocultos ate a revelacao; o servidor nunca envia o palpite de um
   jogador para outro antes da fase de revelacao.
-- Somente o host avanca as etapas (`Mostrar Resultados`, `Proxima Pergunta`,
+- A revelacao e automatica ao ultimo palpite; somente o host avanca as demais
+  etapas (`Proxima Pergunta`,
   `Encerrar Partida`); jogadores comuns nunca recebem esses controles.
 - Pontuacao por colocacao na rodada (100 / 70 / 50 / 20), com empate resolvido
   por quem enviou o palpite primeiro e posicoes seguintes ajustadas quando o

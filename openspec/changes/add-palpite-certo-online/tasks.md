@@ -21,7 +21,7 @@
 
 ## 4. Contrato de socket
 
-- [x] 4.1 Adicionar em `lib/socket/events.ts` os eventos cliente->servidor: `palpite-certo:start`, `palpite-certo:submit-guess`, `palpite-certo:reveal`, `palpite-certo:next-question`, `palpite-certo:end-match`, `palpite-certo:back-to-lobby`
+- [x] 4.1 Adicionar em `lib/socket/events.ts` os eventos cliente->servidor: `palpite-certo:start`, `palpite-certo:submit-guess`, `palpite-certo:next-question`, `palpite-certo:end-match`, `palpite-certo:back-to-lobby`
 - [x] 4.2 Adicionar em `lib/socket/events.ts` os eventos servidor->cliente: `palpite-certo:started`, `palpite-certo:state-updated`, `palpite-certo:back-to-lobby-nav`
 - [x] 4.3 Adicionar em `lib/socket/types.ts` os payloads (`PalpiteCertoStatePayload`, `PalpiteCertoQuestionPayload`, `PalpiteCertoPlayerPayload`, `PalpiteCertoRoundResultPayload`, `PalpiteCertoPhase`) e registra-los em `ClientToServerEvents` / `ServerToClientEvents`
 - [x] 4.4 Garantir que o payload de estado nao possua campo para `correctValue` nem palpites de terceiros fora das fases de revelacao
@@ -31,7 +31,7 @@
 - [x] 5.1 Implementar `startPalpiteCertoMatch` em `lib/socket/server.ts`: validar host, minimo de 2 jogadores conectados, sortear a primeira pergunta, criar o `Match` e emitir `palpite-certo:started` com o path
 - [x] 5.2 Implementar `toPalpiteCertoStatePayload(state, viewerUserId)` e os emissores `emitPalpiteCertoState` / `emitPalpiteCertoStateToSocket` (payload por destinatario)
 - [x] 5.3 Implementar `submitPalpiteCertoGuess`: validar numero inteiro finito, recusar segundo envio, carimbar `submittedAt` no servidor e reemitir o estado com o contador atualizado
-- [x] 5.4 Implementar `revealPalpiteCertoRound`: validar host, exigir zero pendentes entre conectados, apurar pontuacao pelo engine, acumular totais e mudar a fase para `reveal`
+- [x] 5.4 Implementar `revealPalpiteCertoRoundIfComplete`: sem pendentes entre conectados, apurar pontuacao pelo engine, acumular totais e mudar a fase para `reveal`
 - [x] 5.5 Implementar `nextPalpiteCertoQuestion`: validar host, sortear pergunta inedita, limpar palpites, incrementar a rodada e voltar a fase `question`; encerrar a partida se o banco estiver vazio
 - [x] 5.6 Implementar `finishPalpiteCertoMatch` (fase `finished` com ranking final) e `backPalpiteCertoRoomToLobby` com `palpite-certo:back-to-lobby-nav`
 - [x] 5.7 Registrar os handlers `socket.on` dos seis eventos, com validacao de sala/partida ativa, resposta de erro ao emissor e log de contexto
@@ -52,7 +52,7 @@
 - [x] 7.4 Criar a tela de revelacao com contador animado e a resposta correta em destaque central (emoji + valor + unidade), usando `framer-motion`
 - [x] 7.5 Criar o ranking da rodada com nome, palpite, diferenca e pontos, ordenado do mais proximo ao mais distante, e o podio animado dos tres primeiros
 - [x] 7.6 Criar o ranking geral acumulado visivel em todas as fases
-- [x] 7.7 Renderizar os controles do host ("Mostrar Resultados", "Proxima Pergunta", "Encerrar Partida") apenas quando `isHost` e a fase permitirem
+- [x] 7.7 Renderizar os controles do host ("Proxima Pergunta", "Encerrar Partida") apenas quando `isHost` e a fase permitirem, em barra fixa na base da tela
 - [x] 7.8 Tratar erros de socket e estados de carregamento com mensagens claras ao usuario
 
 ## 8. Verificacao

@@ -86,10 +86,11 @@ papeis privados e na Mimica para a palavra do mimico.
 
 ### Autorizacao do host no servidor
 
-Cada handler de avanco (`reveal`, `next-question`, `end-match`) valida
+Cada handler de avanco (`next-question`, `end-match`) valida
 `RoomPlayer.isHost` antes de mutar o estado. O flag `isHost` no payload apenas
-decide o que a UI renderiza; a regra vive no backend. `reveal` valida tambem que
-nao ha jogador conectado pendente.
+decide o que a UI renderiza; a regra vive no backend. A revelacao nao passa
+por essa validacao porque nao e acionada por ninguem: ela depende so de nao
+haver jogador conectado pendente.
 
 ### Pontuacao e desempate em modulo puro
 
@@ -161,8 +162,11 @@ ranking sao etapas de uma mesma animacao dentro de `reveal`; separa-las em duas
 fases de servidor obrigaria o host a um clique extra sem nada acontecer entre
 elas.
 
-As transicoes globais sao todas disparadas pelo host:
-`question -> reveal -> question` (nova pergunta) ou `-> finished`.
+`question -> reveal` e automatica: o servidor avalia os pendentes apos cada
+palpite (e apos cada desconexao, porque quem sai deixa de contar) e muda a fase
+sozinho quando o ultimo entra. Exigir um clique do host ali so adicionava
+espera — a informacao ja estava completa. As demais transicoes
+(`reveal -> question` e `-> finished`) continuam nas maos do host.
 
 Navegacao segue o padrao existente: evento `palpite-certo:started` com `path`
 para levar todos a `/room/[code]/palpite-certo`, e
@@ -177,7 +181,7 @@ sobrescreve a primeira — um palpite desaparece e a rodada trava esperando um
 jogador que ja respondeu. Isso foi observado na pratica no teste de ponta a
 ponta.
 
-`submitPalpiteCertoGuess` e `revealPalpiteCertoRound` passam a ler o estado com
+`submitPalpiteCertoGuess` e `revealPalpiteCertoRoundIfComplete` leem o estado com
 `SELECT state FROM "Match" WHERE id = ... FOR UPDATE` dentro da transacao. As
 transacoes concorrentes esperam em vez de lerem a mesma versao, o que serializa
 as gravacoes.

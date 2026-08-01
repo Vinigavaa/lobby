@@ -621,7 +621,6 @@ export type PalpiteCertoStatePayload = {
   ownGuess: number | null;
   answeredCount: number;
   totalPlayers: number;
-  canReveal: boolean;
   players: PalpiteCertoPlayerPayload[];
   roundResults: PalpiteCertoRoundResultPayload[] | null;
   ranking: PalpiteCertoRankingEntryPayload[];
@@ -686,7 +685,6 @@ export interface ClientToServerEvents {
   "palpite-certo:submit-guess": (
     payload: PalpiteCertoSubmitGuessPayload
   ) => void;
-  "palpite-certo:reveal": (payload: PalpiteCertoHostActionPayload) => void;
   "palpite-certo:next-question": (
     payload: PalpiteCertoHostActionPayload
   ) => void;

@@ -1813,6 +1813,15 @@ export function createSocketServer(httpServer: HttpServer) {
           }
 
           await emitPalpiteCertoState(result.roomCode, result.matchId);
+
+          // Se este era o ultimo palpite pendente, a rodada revela sozinha.
+          const revealed = await revealPalpiteCertoRoundIfComplete(
+            result.roomCode
+          );
+
+          if (revealed) {
+            await emitPalpiteCertoState(revealed.roomCode, revealed.matchId);
+          }
         } catch (error) {
           console.error(
             `[palpite-certo] Falha ao registrar palpite na sala ${normalizedRoomCode}`,
@@ -1820,43 +1829,6 @@ export function createSocketServer(httpServer: HttpServer) {
           );
           socket.emit(SOCKET_EVENTS.ERROR, {
             message: "Nao foi possivel enviar o palpite",
-          });
-        }
-      }
-    );
-
-    socket.on(
-      SOCKET_EVENTS.PALPITE_CERTO_REVEAL,
-      async ({ roomCode, userId }) => {
-        const normalizedRoomCode = normalizeRoomCode(roomCode);
-        const normalizedUserId = userId.trim();
-
-        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
-          socket.emit(SOCKET_EVENTS.ERROR, {
-            message: "Sala ou usuario invalido",
-          });
-          return;
-        }
-
-        try {
-          const result = await revealPalpiteCertoRound(
-            normalizedRoomCode,
-            normalizedUserId
-          );
-
-          if ("error" in result) {
-            socket.emit(SOCKET_EVENTS.ERROR, { message: result.error });
-            return;
-          }
-
-          await emitPalpiteCertoState(result.roomCode, result.matchId);
-        } catch (error) {
-          console.error(
-            `[palpite-certo] Falha ao revelar rodada na sala ${normalizedRoomCode}`,
-            error
-          );
-          socket.emit(SOCKET_EVENTS.ERROR, {
-            message: "Nao foi possivel mostrar os resultados",
           });
         }
       }
@@ -6139,6 +6111,14 @@ async function disconnectRoomPlayer(
     });
 
     await emitRoomState(roomCode);
+
+    // Quem sai deixa de contar como pendente: pode ser o ultimo palpite que
+    // faltava para a rodada do Palpite Certo revelar.
+    const revealed = await revealPalpiteCertoRoundIfComplete(roomCode);
+
+    if (revealed) {
+      await emitPalpiteCertoState(revealed.roomCode, revealed.matchId);
+    }
   } catch {
     return;
   }
@@ -7260,47 +7240,43 @@ async function findPendingPalpiteCertoPlayers(
   );
 }
 
-async function revealPalpiteCertoRound(
-  roomCode: string,
-  hostUserId: string
-): Promise<PalpiteCertoMutationResult> {
+/**
+ * Revela a rodada quando nao ha mais nenhum jogador conectado pendente.
+ *
+ * A revelacao e automatica: assim que o ultimo palpite entra, o servidor muda
+ * a fase sozinho, sem depender de clique do host. Tambem e chamada apos uma
+ * desconexao, porque quem sai deixa de contar como pendente e pode ser o
+ * ultimo que faltava.
+ *
+ * Retorna `null` quando nao ha nada a fazer (sem partida ativa, rodada ja
+ * revelada ou ainda com pendentes) — isso e o caso normal, nao um erro.
+ */
+async function revealPalpiteCertoRoundIfComplete(
+  roomCode: string
+): Promise<{ roomCode: string; matchId: string } | null> {
   return prisma.$transaction(async (tx) => {
     const room = await tx.room.findUnique({
       where: { code: roomCode },
       select: palpiteCertoHostRoomSelect,
     });
-    const validationError = validatePalpiteCertoHostActionRoom(room, hostUserId);
-
-    if (validationError) {
-      return { error: validationError };
-    }
-
     const match = room?.matches.at(0);
 
     if (!room || !match || !isPalpiteCertoMatchState(match.state)) {
-      return { error: "Partida de Palpite Certo nao encontrada" };
+      return null;
     }
 
     // Trava a linha para nao apurar sobre um estado ja desatualizado por um
     // palpite que entrou no mesmo instante.
     const state = await lockPalpiteCertoMatchState(tx, match.id);
 
-    if (!state) {
-      return { error: "Partida de Palpite Certo nao encontrada" };
-    }
-
-    if (state.phase !== "question") {
-      return { error: "A rodada ja foi revelada" };
-    }
-
-    if (!state.currentQuestion) {
-      return { error: "Nao ha pergunta ativa nesta rodada" };
+    if (!state || state.phase !== "question" || !state.currentQuestion) {
+      return null;
     }
 
     const pending = await findPendingPalpiteCertoPlayers(tx, room.id, state);
 
     if (pending.length > 0) {
-      return { error: "Ainda ha jogadores sem palpite confirmado" };
+      return null;
     }
 
     const results = scorePalpiteCertoRound(
@@ -7532,10 +7508,6 @@ function toPalpiteCertoStatePayload(
     ownGuess: ownGuess?.value ?? null,
     answeredCount,
     totalPlayers: activePlayers.length,
-    canReveal:
-      state.phase === "question" &&
-      activePlayers.length > 0 &&
-      answeredCount === activePlayers.length,
     players: state.players.map((player) => ({
       userId: player.userId,
       nickname: player.nickname,

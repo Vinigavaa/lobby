@@ -78,30 +78,22 @@ revelacao, expondo apenas a contagem de quantos ja responderam.
 - **WHEN** um jogador inspeciona o estado recebido durante a espera
 - **THEN** nenhum palpite de outro jogador esta presente no payload
 
-### Requirement: Revelacao controlada pelo host
-O sistema SHALL liberar o botao "Mostrar Resultados" somente ao host e somente
-apos todos os jogadores conectados terem confirmado seus palpites; a revelacao
+### Requirement: Revelacao automatica ao ultimo palpite
+O sistema SHALL revelar a rodada automaticamente assim que nao houver mais
+nenhum jogador conectado pendente, sem depender de acao do host; a revelacao
 SHALL ocorrer simultaneamente para todos.
 
-#### Scenario: Botao liberado ao host
-- **WHEN** todos os jogadores conectados confirmaram seus palpites
-- **THEN** apenas o host recebe o controle "Mostrar Resultados"
-
 #### Scenario: Revelacao simultanea
-- **WHEN** o host aciona "Mostrar Resultados"
+- **WHEN** o ultimo jogador conectado confirma seu palpite
 - **THEN** a partida passa para a fase `reveal` e todos os jogadores recebem, ao mesmo tempo, a resposta correta, os palpites e a pontuacao da rodada
 
-#### Scenario: Jogador comum tenta revelar
-- **WHEN** um jogador que nao e host emite o evento de revelacao
-- **THEN** o servidor rejeita a acao e o estado da partida nao muda
-
-#### Scenario: Revelacao antes de todos responderem
-- **WHEN** o host emite o evento de revelacao com jogadores conectados ainda pendentes
-- **THEN** o servidor rejeita a acao e responde com erro
+#### Scenario: Nenhum controle de revelacao na interface
+- **WHEN** ha jogadores conectados ainda pendentes
+- **THEN** nenhum jogador, host ou nao, dispoe de controle para forcar a revelacao
 
 #### Scenario: Jogador desconectado nao trava a rodada
 - **WHEN** um jogador se desconecta sem ter confirmado o palpite
-- **THEN** ele deixa de ser contabilizado como pendente e a rodada pode ser revelada
+- **THEN** ele deixa de ser contabilizado como pendente e, se era o ultimo, a rodada revela automaticamente
 
 ### Requirement: Pontuacao por colocacao na rodada
 O sistema SHALL ordenar os jogadores pela menor diferenca absoluta entre o
