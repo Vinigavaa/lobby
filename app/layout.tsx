@@ -17,6 +17,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "PartyRoom",
   description: "Party games multiplayer para jogar entre amigos.",
+  appleWebApp: {
+    // Sem isso o iOS abre o atalho da tela inicial como uma aba comum.
+    capable: true,
+    title: "PartyRoom",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 /**
@@ -24,12 +30,16 @@ export const metadata: Metadata = {
  * entalhe e da barra de gestos. E o que da valor a `env(safe-area-inset-*)`:
  * sem isso o sistema encaixa a pagina na area segura e os insets valem zero.
  *
+ * `themeColor` pinta a barra do sistema com o fundo do app; sem ela o
+ * navegador usa o branco padrao, que destoa do tema escuro.
+ *
  * Sem `maximumScale`, de proposito: limitar o zoom quebraria a acessibilidade.
  */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0a0d16",
 };
 
 export default function RootLayout({
