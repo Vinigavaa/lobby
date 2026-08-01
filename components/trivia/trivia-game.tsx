@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { GameScreen } from "@/components/ui/game-screen";
 import { ConnectionError } from "@/components/ui/connection-error";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
@@ -170,92 +171,9 @@ export function TriviaGame({ code }: TriviaGameProps) {
   }
 
   return (
-    <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col justify-between gap-6">
-        <div className="space-y-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">
-              Sala {code}
-              {state ? ` · Rodada ${state.roundNumber}/${state.totalRounds}` : ""}
-            </p>
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Sparkles className="size-5" />
-            </div>
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {!state && hasConnectionFailed ? (
-            <ConnectionError
-              onRetry={retryConnection}
-              onBackToLobby={() => router.push(`/room/${code}`)}
-            />
-          ) : null}
-
-          {!state && !hasConnectionFailed ? (
-            <div className="rounded-[20px] border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 animate-spin text-primary" />
-                <div>
-                  <h2 className="font-semibold">Carregando partida...</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Aguardando estado da sala.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {state && phase === "wheel" && state.theme ? (
-            <TriviaWheel
-              spinKey={state.roundNumber}
-              themeId={state.theme.id}
-              themeLabel={state.theme.label}
-              themeEmoji={state.theme.emoji}
-            />
-          ) : null}
-
-          {state && phase === "question" && state.question ? (
-            <QuestionPhase
-              question={state.question}
-              remainingSeconds={remainingSeconds}
-              hasAnswered={state.hasAnswered}
-              selectedOptionIndex={state.selectedOptionIndex}
-              players={state.players}
-              onAnswer={submitAnswer}
-            />
-          ) : null}
-
-          {state && phase === "reveal-answer" && state.question && state.reveal ? (
-            <RevealPhase
-              options={state.question.options}
-              reveal={state.reveal}
-              players={state.players}
-              currentUserId={currentUserId}
-            />
-          ) : null}
-
-          {state && phase === "ranking" && state.ranking ? (
-            <RankingPhase
-              ranking={state.ranking}
-              isLastRound={state.roundNumber >= state.totalRounds}
-            />
-          ) : null}
-
-          {state && phase === "finished" && state.finalStats ? (
-            <FinalPhase
-              finalStats={state.finalStats}
-              isHost={isHost}
-              onPlayAgain={playAgain}
-              onBackToLobby={backToLobby}
-            />
-          ) : null}
-        </div>
-
+    <GameScreen
+      maxWidth="2xl"
+      actions={
         <Button
           type="button"
           size="lg"
@@ -266,8 +184,92 @@ export function TriviaGame({ code }: TriviaGameProps) {
           <LogOut className="size-4" />
           Sair
         </Button>
-      </section>
-    </main>
+      }
+    >
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-muted-foreground">
+            Sala {code}
+            {state ? ` · Rodada ${state.roundNumber}/${state.totalRounds}` : ""}
+          </p>
+          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Sparkles className="size-5" />
+          </div>
+        </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {!state && hasConnectionFailed ? (
+          <ConnectionError
+            onRetry={retryConnection}
+            onBackToLobby={() => router.push(`/room/${code}`)}
+          />
+        ) : null}
+
+        {!state && !hasConnectionFailed ? (
+          <div className="rounded-[20px] border border-border bg-card p-5 shadow-2xl shadow-black/20">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <h2 className="font-semibold">Carregando partida...</h2>
+                <p className="text-sm text-muted-foreground">
+                  Aguardando estado da sala.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {state && phase === "wheel" && state.theme ? (
+          <TriviaWheel
+            spinKey={state.roundNumber}
+            themeId={state.theme.id}
+            themeLabel={state.theme.label}
+            themeEmoji={state.theme.emoji}
+          />
+        ) : null}
+
+        {state && phase === "question" && state.question ? (
+          <QuestionPhase
+            question={state.question}
+            remainingSeconds={remainingSeconds}
+            hasAnswered={state.hasAnswered}
+            selectedOptionIndex={state.selectedOptionIndex}
+            players={state.players}
+            onAnswer={submitAnswer}
+          />
+        ) : null}
+
+        {state && phase === "reveal-answer" && state.question && state.reveal ? (
+          <RevealPhase
+            options={state.question.options}
+            reveal={state.reveal}
+            players={state.players}
+            currentUserId={currentUserId}
+          />
+        ) : null}
+
+        {state && phase === "ranking" && state.ranking ? (
+          <RankingPhase
+            ranking={state.ranking}
+            isLastRound={state.roundNumber >= state.totalRounds}
+          />
+        ) : null}
+
+        {state && phase === "finished" && state.finalStats ? (
+          <FinalPhase
+            finalStats={state.finalStats}
+            isHost={isHost}
+            onPlayAgain={playAgain}
+            onBackToLobby={backToLobby}
+          />
+        ) : null}
+      </div>
+    </GameScreen>
   );
 }
 

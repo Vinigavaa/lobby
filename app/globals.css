@@ -83,6 +83,6 @@
   }
 
   body {
-    @apply min-h-screen bg-background text-foreground antialiased;
+    @apply min-h-dvh bg-background text-foreground antialiased;
   }
 }

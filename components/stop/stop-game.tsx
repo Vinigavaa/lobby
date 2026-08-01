@@ -15,6 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { GameScreen } from "@/components/ui/game-screen";
 import { ConnectionError } from "@/components/ui/connection-error";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -293,117 +294,9 @@ export function StopGame({ code }: StopGameProps) {
   const isLastRound = state ? state.roundNumber >= state.totalRounds : false;
 
   return (
-    <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col justify-between gap-8">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Sala {code}
-                {state && state.roundNumber > 0
-                  ? ` · Rodada ${state.roundNumber}/${state.totalRounds}`
-                  : ""}
-              </p>
-              <h1 className="font-heading text-3xl font-black">Stop</h1>
-            </div>
-            <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Flag className="size-6" />
-            </div>
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {!state && hasConnectionFailed ? (
-            <ConnectionError
-              onRetry={retryConnection}
-              onBackToLobby={() => router.push(`/room/${code}`)}
-            />
-          ) : null}
-
-          {!state && !hasConnectionFailed ? (
-            <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 animate-spin text-primary" />
-                <div>
-                  <h2 className="font-semibold">Carregando partida...</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Aguardando estado da sala.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {state && phase === "setup" ? (
-            <SetupPhase
-              isHost={isHost}
-              categories={state.categories}
-              duration={duration}
-              totalRounds={totalRounds}
-              selectedCategories={selectedCategories}
-              onToggleCategory={toggleCategory}
-              onDurationChange={setDuration}
-              onRoundsChange={setTotalRounds}
-              onBegin={beginGame}
-            />
-          ) : null}
-
-          {state && phase === "playing" ? (
-            <PlayingPhase
-              letter={state.letter}
-              remaining={remaining}
-              duration={state.durationSeconds}
-              categories={state.categories}
-              answers={answers}
-              hasSubmitted={hasSubmitted}
-              players={state.players}
-              onAnswerChange={(key, value) =>
-                setAnswers((previous) => ({ ...previous, [key]: value }))
-              }
-              onSubmit={submitAnswers}
-            />
-          ) : null}
-
-          {state && phase === "review" && state.review ? (
-            <ReviewPhase
-              review={state.review}
-              currentUserId={currentUserId}
-              letter={state.letter}
-              isHost={isHost}
-              onVote={vote}
-              onReveal={revealResult}
-            />
-          ) : null}
-
-          {state && phase === "roundResult" && state.ranking ? (
-            <ResultPhase
-              ranking={state.ranking}
-              review={state.review}
-              isFinal={false}
-              isHost={isHost}
-              isLastRound={isLastRound}
-              onNext={nextRound}
-              onBackToLobby={backToLobby}
-            />
-          ) : null}
-
-          {state && phase === "finished" && state.ranking ? (
-            <ResultPhase
-              ranking={state.ranking}
-              review={null}
-              isFinal
-              isHost={isHost}
-              isLastRound
-              onNext={nextRound}
-              onBackToLobby={backToLobby}
-            />
-          ) : null}
-        </div>
-
+    <GameScreen
+      maxWidth="2xl"
+      actions={
         <Button
           type="button"
           size="lg"
@@ -414,8 +307,117 @@ export function StopGame({ code }: StopGameProps) {
           <LogOut className="size-4" />
           Sair
         </Button>
-      </section>
-    </main>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Sala {code}
+              {state && state.roundNumber > 0
+                ? ` · Rodada ${state.roundNumber}/${state.totalRounds}`
+                : ""}
+            </p>
+            <h1 className="font-heading text-3xl font-black">Stop</h1>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Flag className="size-6" />
+          </div>
+        </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {!state && hasConnectionFailed ? (
+          <ConnectionError
+            onRetry={retryConnection}
+            onBackToLobby={() => router.push(`/room/${code}`)}
+          />
+        ) : null}
+
+        {!state && !hasConnectionFailed ? (
+          <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <h2 className="font-semibold">Carregando partida...</h2>
+                <p className="text-sm text-muted-foreground">
+                  Aguardando estado da sala.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {state && phase === "setup" ? (
+          <SetupPhase
+            isHost={isHost}
+            categories={state.categories}
+            duration={duration}
+            totalRounds={totalRounds}
+            selectedCategories={selectedCategories}
+            onToggleCategory={toggleCategory}
+            onDurationChange={setDuration}
+            onRoundsChange={setTotalRounds}
+            onBegin={beginGame}
+          />
+        ) : null}
+
+        {state && phase === "playing" ? (
+          <PlayingPhase
+            letter={state.letter}
+            remaining={remaining}
+            duration={state.durationSeconds}
+            categories={state.categories}
+            answers={answers}
+            hasSubmitted={hasSubmitted}
+            players={state.players}
+            onAnswerChange={(key, value) =>
+              setAnswers((previous) => ({ ...previous, [key]: value }))
+            }
+            onSubmit={submitAnswers}
+          />
+        ) : null}
+
+        {state && phase === "review" && state.review ? (
+          <ReviewPhase
+            review={state.review}
+            currentUserId={currentUserId}
+            letter={state.letter}
+            isHost={isHost}
+            onVote={vote}
+            onReveal={revealResult}
+          />
+        ) : null}
+
+        {state && phase === "roundResult" && state.ranking ? (
+          <ResultPhase
+            ranking={state.ranking}
+            review={state.review}
+            isFinal={false}
+            isHost={isHost}
+            isLastRound={isLastRound}
+            onNext={nextRound}
+            onBackToLobby={backToLobby}
+          />
+        ) : null}
+
+        {state && phase === "finished" && state.ranking ? (
+          <ResultPhase
+            ranking={state.ranking}
+            review={null}
+            isFinal
+            isHost={isHost}
+            isLastRound
+            onNext={nextRound}
+            onBackToLobby={backToLobby}
+          />
+        ) : null}
+      </div>
+    </GameScreen>
   );
 }
 

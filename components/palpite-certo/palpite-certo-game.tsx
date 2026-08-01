@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { ConnectionError } from "@/components/ui/connection-error";
+import { GameScreen } from "@/components/ui/game-screen";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
 import { SOCKET_EVENTS } from "@/lib/socket/events";
 import type { PalpiteCertoStatePayload } from "@/lib/socket/types";
@@ -140,97 +141,10 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
   }
 
   return (
-    // `dvh` em vez de `vh`: no celular a barra do navegador entra na conta de
-    // `100vh` e a base da tela fica fora da area visivel.
-    <main className="min-h-dvh bg-background text-foreground">
-      <section className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col gap-6 px-5 py-6">
-        <div className="flex-1 space-y-5">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted-foreground">
-              Sala {code}
-              {state ? ` · Rodada ${state.roundNumber}` : ""}
-            </p>
-            <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Target className="size-5" />
-            </div>
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {!state && hasConnectionFailed ? (
-            <ConnectionError
-              onRetry={retryConnection}
-              onBackToLobby={() => router.push(`/room/${code}`)}
-            />
-          ) : null}
-
-          {!state && !hasConnectionFailed ? (
-            <div className="rounded-[20px] border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 animate-spin text-primary" />
-                <div>
-                  <h2 className="font-semibold">Carregando partida...</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Aguardando estado da sala.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {state && phase === "question" && state.question ? (
-            <QuestionPhase
-              // Remontar a cada rodada zera o campo sem efeito colateral.
-              key={roundNumber}
-              question={state.question}
-              hasGuessed={state.hasGuessed}
-              ownGuess={state.ownGuess}
-              answeredCount={state.answeredCount}
-              totalPlayers={state.totalPlayers}
-              onSubmit={submitGuess}
-            />
-          ) : null}
-
-          {state && phase === "reveal" && state.question ? (
-            <PalpiteCertoReveal
-              key={state.roundNumber}
-              question={state.question}
-              correctValue={state.correctValue}
-              roundResults={state.roundResults}
-              currentUserId={currentUserId}
-            />
-          ) : null}
-
-          {state && phase === "finished" ? (
-            <FinalPhase ranking={state.ranking} />
-          ) : null}
-
-          {state && phase !== "finished" ? (
-            <PalpiteCertoRanking ranking={state.ranking} />
-          ) : null}
-
-          {state && !isHost && phase !== "question" ? (
-            <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent">
-              Aguardando o host escolher o proximo passo...
-            </p>
-          ) : null}
-        </div>
-
-        {/*
-          Barra fixa na base: no celular a pagina fica mais alta que a tela e,
-          no fluxo normal, os botoes do host so ficavam alcancaveis com a
-          pagina rolada ate o fim.
-        */}
-        <div
-          className={cn(
-            "sticky bottom-0 -mx-5 space-y-2.5 border-t border-border bg-background px-5 pt-3",
-            "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
-          )}
-        >
+    <GameScreen
+      maxWidth="2xl"
+      actions={
+        <>
           {state ? (
             <HostControls
               phase={phase}
@@ -251,15 +165,91 @@ export function PalpiteCertoGame({ code }: PalpiteCertoGameProps) {
             type="button"
             size="lg"
             variant="secondary"
-            className="h-12 w-full gap-2 rounded-[14px] border border-border"
+            className="h-12 gap-2 rounded-[14px] border border-border"
             onClick={leaveGame}
           >
             <LogOut className="size-4" />
             Sair
           </Button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-muted-foreground">
+            Sala {code}
+            {state ? ` · Rodada ${state.roundNumber}` : ""}
+          </p>
+          <div className="flex size-10 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Target className="size-5" />
+          </div>
         </div>
-      </section>
-    </main>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {!state && hasConnectionFailed ? (
+          <ConnectionError
+            onRetry={retryConnection}
+            onBackToLobby={() => router.push(`/room/${code}`)}
+          />
+        ) : null}
+
+        {!state && !hasConnectionFailed ? (
+          <div className="rounded-[20px] border border-border bg-card p-5 shadow-2xl shadow-black/20">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <h2 className="font-semibold">Carregando partida...</h2>
+                <p className="text-sm text-muted-foreground">
+                  Aguardando estado da sala.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {state && phase === "question" && state.question ? (
+          <QuestionPhase
+            // Remontar a cada rodada zera o campo sem efeito colateral.
+            key={roundNumber}
+            question={state.question}
+            hasGuessed={state.hasGuessed}
+            ownGuess={state.ownGuess}
+            answeredCount={state.answeredCount}
+            totalPlayers={state.totalPlayers}
+            onSubmit={submitGuess}
+          />
+        ) : null}
+
+        {state && phase === "reveal" && state.question ? (
+          <PalpiteCertoReveal
+            key={state.roundNumber}
+            question={state.question}
+            correctValue={state.correctValue}
+            roundResults={state.roundResults}
+            currentUserId={currentUserId}
+          />
+        ) : null}
+
+        {state && phase === "finished" ? (
+          <FinalPhase ranking={state.ranking} />
+        ) : null}
+
+        {state && phase !== "finished" ? (
+          <PalpiteCertoRanking ranking={state.ranking} />
+        ) : null}
+
+        {state && !isHost && phase !== "question" ? (
+          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent">
+            Aguardando o host escolher o proximo passo...
+          </p>
+        ) : null}
+      </div>
+    </GameScreen>
   );
 }
 

@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { GameScreen } from "@/components/ui/game-screen";
 import { ConnectionError } from "@/components/ui/connection-error";
 import { Label } from "@/components/ui/label";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
@@ -244,96 +245,9 @@ export function MimicaGame({ code }: MimicaGameProps) {
   const mimerName = state?.currentMimerNickname ?? "jogador";
 
   return (
-    <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col justify-between gap-8">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Sala {code}
-                {state && state.roundNumber > 0
-                  ? ` · Rodada ${state.roundNumber}`
-                  : ""}
-              </p>
-              <h1 className="font-heading text-3xl font-black">Mimica</h1>
-            </div>
-            <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Drama className="size-6" />
-            </div>
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {!state && hasConnectionFailed ? (
-            <ConnectionError
-              onRetry={retryConnection}
-              onBackToLobby={() => router.push(`/room/${code}`)}
-            />
-          ) : null}
-
-          {!state && !hasConnectionFailed ? (
-            <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 animate-spin text-primary" />
-                <div>
-                  <h2 className="font-semibold">Carregando partida...</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Aguardando estado da sala.
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          {state && phase === "setup" ? (
-            <SetupPhase
-              isHost={isHost}
-              category={category}
-              categories={categories}
-              duration={duration}
-              onCategoryChange={setCategory}
-              onDurationChange={setDuration}
-              onBegin={beginRound}
-            />
-          ) : null}
-
-          {state && phase === "reveal" ? (
-            <RevealPhase
-              isCurrentMimer={isCurrentMimer}
-              mimerName={mimerName}
-              privateWord={privateWord}
-              onStart={startMime}
-            />
-          ) : null}
-
-          {state && phase === "playing" ? (
-            <PlayingPhase
-              isCurrentMimer={isCurrentMimer}
-              mimerName={mimerName}
-              remaining={remaining}
-              duration={state.durationSeconds}
-              onCorrect={markCorrect}
-            />
-          ) : null}
-
-          {state && phase === "roundResult" && state.lastRound ? (
-            <ResultPhase
-              isHost={isHost}
-              lastRound={state.lastRound}
-              onNext={nextRound}
-              onBackToLobby={backToLobby}
-            />
-          ) : null}
-
-          {state && phase !== "playing" ? (
-            <Scoreboard players={state.players} />
-          ) : null}
-        </div>
-
+    <GameScreen
+      maxWidth="md"
+      actions={
         <Button
           type="button"
           size="lg"
@@ -344,8 +258,96 @@ export function MimicaGame({ code }: MimicaGameProps) {
           <LogOut className="size-4" />
           Sair
         </Button>
-      </section>
-    </main>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Sala {code}
+              {state && state.roundNumber > 0
+                ? ` · Rodada ${state.roundNumber}`
+                : ""}
+            </p>
+            <h1 className="font-heading text-3xl font-black">Mimica</h1>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Drama className="size-6" />
+          </div>
+        </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {!state && hasConnectionFailed ? (
+          <ConnectionError
+            onRetry={retryConnection}
+            onBackToLobby={() => router.push(`/room/${code}`)}
+          />
+        ) : null}
+
+        {!state && !hasConnectionFailed ? (
+          <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <h2 className="font-semibold">Carregando partida...</h2>
+                <p className="text-sm text-muted-foreground">
+                  Aguardando estado da sala.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {state && phase === "setup" ? (
+          <SetupPhase
+            isHost={isHost}
+            category={category}
+            categories={categories}
+            duration={duration}
+            onCategoryChange={setCategory}
+            onDurationChange={setDuration}
+            onBegin={beginRound}
+          />
+        ) : null}
+
+        {state && phase === "reveal" ? (
+          <RevealPhase
+            isCurrentMimer={isCurrentMimer}
+            mimerName={mimerName}
+            privateWord={privateWord}
+            onStart={startMime}
+          />
+        ) : null}
+
+        {state && phase === "playing" ? (
+          <PlayingPhase
+            isCurrentMimer={isCurrentMimer}
+            mimerName={mimerName}
+            remaining={remaining}
+            duration={state.durationSeconds}
+            onCorrect={markCorrect}
+          />
+        ) : null}
+
+        {state && phase === "roundResult" && state.lastRound ? (
+          <ResultPhase
+            isHost={isHost}
+            lastRound={state.lastRound}
+            onNext={nextRound}
+            onBackToLobby={backToLobby}
+          />
+        ) : null}
+
+        {state && phase !== "playing" ? (
+          <Scoreboard players={state.players} />
+        ) : null}
+      </div>
+    </GameScreen>
   );
 }
 

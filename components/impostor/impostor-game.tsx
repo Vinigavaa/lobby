@@ -17,6 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { GameScreen } from "@/components/ui/game-screen";
 import { ConnectionError } from "@/components/ui/connection-error";
 import { Input } from "@/components/ui/input";
 import { createSocketClient, type LobbySocketClient } from "@/lib/socket/client";
@@ -284,140 +285,9 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
     phase === "reveal" && totalCount > 0 && readyCount < totalCount;
 
   return (
-    <main className="min-h-screen bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-md flex-col justify-between gap-8">
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Sala {code}
-              </p>
-              <h1 className="font-heading text-3xl font-black">Impostor</h1>
-            </div>
-            <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Gamepad2 className="size-6" />
-            </div>
-          </div>
-
-          {error ? (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-
-          {!role && hasConnectionFailed ? (
-            <ConnectionError
-              onRetry={retryConnection}
-              onBackToLobby={() => router.push(`/room/${code}`)}
-            />
-          ) : (
-          <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
-            {role ? (
-              <div className="space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
-                    {isImpostor ? (
-                      <EyeOff className="size-5" />
-                    ) : (
-                      <ShieldQuestion className="size-5" />
-                    )}
-                  </div>
-                  <div>
-                    <h2 className="font-semibold">
-                      {isImpostor ? "Voce e o impostor" : "Palavra secreta"}
-                    </h2>
-                    <p className="text-sm text-muted-foreground">
-                      Categoria: {role.category}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-md border border-border bg-background px-4 py-5">
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {isImpostor ? "Sua funcao" : "Sua palavra"}
-                  </p>
-                  {isImpostor ? (
-                    <div className="mt-2 space-y-2">
-                      <p className="text-3xl font-black">Impostor</p>
-                      <p className="text-sm text-muted-foreground">
-                        Tente descobrir a palavra sem ser descoberto
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-3xl font-black">{role.word}</p>
-                  )}
-                </div>
-
-                {phase === "reveal" ? (
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="h-12 w-full gap-2"
-                    disabled={currentPlayerReady}
-                    onClick={markReady}
-                  >
-                    <CheckCircle2 className="size-4" />
-                    {currentPlayerReady ? "Pronto" : "Estou pronto"}
-                  </Button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <Loader2 className="size-5 animate-spin text-primary" />
-                <div>
-                  <h2 className="font-semibold">Carregando sua funcao...</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Aguardando informacao privada do servidor.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-          )}
-
-          {phase === "reveal" ? (
-            <RevealStatus
-              readyCount={readyCount}
-              totalCount={totalCount}
-              waitingForPlayers={waitingForPlayers}
-            />
-          ) : null}
-
-          {phase === "hints" ? (
-            <HintsPhase
-              currentTurnUserId={currentTurnUserId}
-              currentTurnNickname={currentTurnPlayer?.nickname ?? null}
-              hintText={hintText}
-              hints={hints}
-              isCurrentTurn={isCurrentTurn}
-              players={players}
-              setHintText={setHintText}
-              submitHint={submitHint}
-            />
-          ) : null}
-
-          {phase === "voting" ? (
-            <VotingPhase
-              players={players}
-              result={result}
-              totalCount={totalCount}
-              voteConfirmed={voteConfirmed}
-              votesCount={votesCount}
-              voteFor={voteFor}
-            />
-          ) : null}
-
-          {phase === "result" && result ? (
-            <ResultPhase
-              backToLobby={backToLobby}
-              hints={hints}
-              isHost={Boolean(role?.isHost)}
-              playAgain={playAgain}
-              result={result}
-            />
-          ) : null}
-        </div>
-
+    <GameScreen
+      maxWidth="md"
+      actions={
         <Button
           type="button"
           size="lg"
@@ -428,8 +298,140 @@ export function ImpostorGame({ code }: ImpostorGameProps) {
           <LogOut className="size-4" />
           Sair
         </Button>
-      </section>
-    </main>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">
+              Sala {code}
+            </p>
+            <h1 className="font-heading text-3xl font-black">Impostor</h1>
+          </div>
+          <div className="flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
+            <Gamepad2 className="size-6" />
+          </div>
+        </div>
+
+        {error ? (
+          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+
+        {!role && hasConnectionFailed ? (
+          <ConnectionError
+            onRetry={retryConnection}
+            onBackToLobby={() => router.push(`/room/${code}`)}
+          />
+        ) : (
+        <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
+          {role ? (
+            <div className="space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-md bg-accent text-accent-foreground">
+                  {isImpostor ? (
+                    <EyeOff className="size-5" />
+                  ) : (
+                    <ShieldQuestion className="size-5" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="font-semibold">
+                    {isImpostor ? "Voce e o impostor" : "Palavra secreta"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Categoria: {role.category}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border bg-background px-4 py-5">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {isImpostor ? "Sua funcao" : "Sua palavra"}
+                </p>
+                {isImpostor ? (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-3xl font-black">Impostor</p>
+                    <p className="text-sm text-muted-foreground">
+                      Tente descobrir a palavra sem ser descoberto
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-3xl font-black">{role.word}</p>
+                )}
+              </div>
+
+              {phase === "reveal" ? (
+                <Button
+                  type="button"
+                  size="lg"
+                  className="h-12 w-full gap-2"
+                  disabled={currentPlayerReady}
+                  onClick={markReady}
+                >
+                  <CheckCircle2 className="size-4" />
+                  {currentPlayerReady ? "Pronto" : "Estou pronto"}
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Loader2 className="size-5 animate-spin text-primary" />
+              <div>
+                <h2 className="font-semibold">Carregando sua funcao...</h2>
+                <p className="text-sm text-muted-foreground">
+                  Aguardando informacao privada do servidor.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+        )}
+
+        {phase === "reveal" ? (
+          <RevealStatus
+            readyCount={readyCount}
+            totalCount={totalCount}
+            waitingForPlayers={waitingForPlayers}
+          />
+        ) : null}
+
+        {phase === "hints" ? (
+          <HintsPhase
+            currentTurnUserId={currentTurnUserId}
+            currentTurnNickname={currentTurnPlayer?.nickname ?? null}
+            hintText={hintText}
+            hints={hints}
+            isCurrentTurn={isCurrentTurn}
+            players={players}
+            setHintText={setHintText}
+            submitHint={submitHint}
+          />
+        ) : null}
+
+        {phase === "voting" ? (
+          <VotingPhase
+            players={players}
+            result={result}
+            totalCount={totalCount}
+            voteConfirmed={voteConfirmed}
+            votesCount={votesCount}
+            voteFor={voteFor}
+          />
+        ) : null}
+
+        {phase === "result" && result ? (
+          <ResultPhase
+            backToLobby={backToLobby}
+            hints={hints}
+            isHost={Boolean(role?.isHost)}
+            playAgain={playAgain}
+            result={result}
+          />
+        ) : null}
+      </div>
+    </GameScreen>
   );
 }
 
