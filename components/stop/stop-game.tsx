@@ -297,16 +297,35 @@ export function StopGame({ code }: StopGameProps) {
     <GameScreen
       maxWidth="2xl"
       actions={
-        <Button
-          type="button"
-          size="lg"
-          variant="secondary"
-          className="h-12 gap-2"
-          onClick={leaveGame}
-        >
-          <LogOut className="size-4" />
-          Sair
-        </Button>
+        <>
+          {/*
+            Na rodada o "Finalizar" vive aqui, e nao junto dos campos: com o
+            teclado aberto ele ficava fora da tela, justo na fase em que
+            terminar rapido e o que vale ponto.
+          */}
+          {state && phase === "playing" && !hasSubmitted ? (
+            <Button
+              type="button"
+              size="lg"
+              className="h-12 gap-2"
+              onClick={submitAnswers}
+            >
+              <Flag className="size-4" />
+              Finalizar
+            </Button>
+          ) : null}
+
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            className="h-12 gap-2"
+            onClick={leaveGame}
+          >
+            <LogOut className="size-4" />
+            Sair
+          </Button>
+        </>
       }
     >
       <div className="space-y-6">
@@ -378,7 +397,6 @@ export function StopGame({ code }: StopGameProps) {
             onAnswerChange={(key, value) =>
               setAnswers((previous) => ({ ...previous, [key]: value }))
             }
-            onSubmit={submitAnswers}
           />
         ) : null}
 
@@ -559,7 +577,6 @@ type PlayingPhaseProps = {
   hasSubmitted: boolean;
   players: StopStatePayload["players"];
   onAnswerChange: (key: string, value: string) => void;
-  onSubmit: () => void;
 };
 
 function PlayingPhase({
@@ -571,7 +588,6 @@ function PlayingPhase({
   hasSubmitted,
   players,
   onAnswerChange,
-  onSubmit,
 }: PlayingPhaseProps) {
   const isUrgent = remaining <= 10;
   const percent = duration > 0 ? (remaining / duration) * 100 : 0;
@@ -635,16 +651,6 @@ function PlayingPhase({
               />
             </div>
           ))}
-
-          <Button
-            type="button"
-            size="lg"
-            className="mt-2 h-12 w-full gap-2"
-            onClick={onSubmit}
-          >
-            <Flag className="size-4" />
-            Finalizar
-          </Button>
         </div>
       )}
     </div>

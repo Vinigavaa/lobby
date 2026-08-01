@@ -1,5 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
 
+import { useKeyboardInset } from "@/lib/use-keyboard-inset";
 import { cn } from "@/lib/utils";
 
 const maxWidthClass = {
@@ -25,13 +28,17 @@ type GameScreenProps = {
  * - barra de acoes fixa na base: no fluxo normal os botoes ficavam no fim de
  *   uma pagina mais alta que a tela, so alcancaveis com a rolagem no fim.
  *
- * A barra respeita a safe area do sistema (notch e barra de gestos).
+ * A barra respeita a safe area do sistema (notch e barra de gestos) e sobe
+ * junto com o teclado virtual, para nao ficar atras dele enquanto o jogador
+ * digita.
  */
 export function GameScreen({
   children,
   actions,
   maxWidth = "md",
 }: GameScreenProps) {
+  const keyboardInset = useKeyboardInset();
+
   return (
     <main className="min-h-dvh bg-background text-foreground">
       <section
@@ -44,9 +51,10 @@ export function GameScreen({
 
         <div
           className={cn(
-            "sticky bottom-0 -mx-5 grid gap-2.5 border-t border-border bg-background px-5 pt-3",
+            "sticky -mx-5 grid gap-2.5 border-t border-border bg-background px-5 pt-3",
             "pb-[max(0.75rem,env(safe-area-inset-bottom))]"
           )}
+          style={{ bottom: keyboardInset }}
         >
           {actions}
         </div>
