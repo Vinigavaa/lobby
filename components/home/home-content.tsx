@@ -181,7 +181,7 @@ export function HomeContent() {
 
   return (
     <main className="min-h-dvh overflow-hidden bg-background text-foreground">
-      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-between px-5 py-6 sm:max-w-2xl sm:px-8 lg:max-w-5xl lg:py-10">
+      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-between px-5 pt-safe pb-safe sm:max-w-2xl sm:px-8 lg:max-w-5xl lg:py-10">
         <motion.div
           className="flex items-center justify-between"
           initial={{ opacity: 0, y: entryOffset(-12) }}

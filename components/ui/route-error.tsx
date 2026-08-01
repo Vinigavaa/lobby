@@ -30,8 +30,8 @@ export function RouteError({
   }, [error]);
 
   return (
-    <main className="min-h-dvh bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col justify-center gap-6">
+    <main className="flex min-h-dvh flex-col bg-background px-5 pt-safe pb-safe text-foreground">
+      <section className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-6">
         <div className="rounded-lg border border-border bg-card p-5 shadow-2xl shadow-black/20">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-md bg-destructive/15 text-destructive">

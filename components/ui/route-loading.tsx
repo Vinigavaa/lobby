@@ -28,7 +28,7 @@ export function RouteLoading({ title = "Carregando..." }: RouteLoadingProps) {
   }, []);
 
   return (
-    <main className="min-h-dvh bg-background px-5 py-6 text-foreground">
+    <main className="min-h-dvh bg-background px-5 pt-safe pb-safe text-foreground">
       <section className="mx-auto flex w-full max-w-md flex-col gap-6">
         <div className="flex items-center justify-between">
           <div className="space-y-2">

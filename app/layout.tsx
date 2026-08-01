@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Baloo_2, Inter } from "next/font/google";
 import "./globals.css";
 
@@ -17,6 +17,19 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "PartyRoom",
   description: "Party games multiplayer para jogar entre amigos.",
+};
+
+/**
+ * `viewportFit: "cover"` faz a pagina ocupar a tela inteira, por baixo do
+ * entalhe e da barra de gestos. E o que da valor a `env(safe-area-inset-*)`:
+ * sem isso o sistema encaixa a pagina na area segura e os insets valem zero.
+ *
+ * Sem `maximumScale`, de proposito: limitar o zoom quebraria a acessibilidade.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

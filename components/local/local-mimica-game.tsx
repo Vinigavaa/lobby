@@ -128,7 +128,7 @@ export function LocalMimicaGame() {
 
   return (
     <main className="min-h-dvh bg-background text-foreground">
-      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 py-6 sm:max-w-2xl sm:px-8">
+      <section className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-safe pb-safe sm:max-w-2xl sm:px-8">
         {hideChrome ? null : (
           <header className="flex items-center justify-between">
             <Button asChild variant="ghost" size="icon" aria-label="Voltar">

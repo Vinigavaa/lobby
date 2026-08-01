@@ -77,6 +77,22 @@
   --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
 }
 
+/*
+ * Espacamento das bordas da tela.
+ *
+ * So tem efeito com `viewport-fit: cover` no layout: sem ele o sistema ja
+ * encaixa a pagina dentro da area segura e `env(safe-area-inset-*)` vale zero.
+ * O `max` mantem o respiro padrao de 1.5rem quando nao ha entalhe nem barra de
+ * gestos, entao a tela nao muda em aparelho sem recorte.
+ */
+@utility pt-safe {
+  padding-top: max(1.5rem, env(safe-area-inset-top));
+}
+
+@utility pb-safe {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

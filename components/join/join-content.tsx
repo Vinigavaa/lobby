@@ -197,8 +197,8 @@ export function JoinContent() {
   }
 
   return (
-    <main className="min-h-dvh bg-background px-5 py-6 text-foreground">
-      <section className="mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-md flex-col">
+    <main className="flex min-h-dvh flex-col bg-background px-5 pt-safe pb-safe text-foreground">
+      <section className="mx-auto flex w-full max-w-md flex-1 flex-col">
         <Button
           asChild
           variant="secondary"

@@ -43,7 +43,7 @@ export function GameScreen({
     <main className="min-h-dvh bg-background text-foreground">
       <section
         className={cn(
-          "mx-auto flex min-h-dvh w-full flex-col gap-6 px-5 py-6",
+          "mx-auto flex min-h-dvh w-full flex-col gap-6 px-5 pt-safe pb-6",
           maxWidthClass[maxWidth]
         )}
       >
