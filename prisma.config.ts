@@ -10,6 +10,18 @@ export default defineConfig({
     seed: "jiti prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    /**
+     * Migrations vao por conexao direta, nao pelo pooler.
+     *
+     * O `prisma migrate deploy` serializa com `pg_advisory_lock`, que vive na
+     * sessao. Atraves do pooler do Neon (pgbouncer em modo transacao) a sessao
+     * nao e estavel: o lock fica preso numa conexao reaproveitada e nunca e
+     * liberado, e todo deploy seguinte falha com P1002 esperando por ele.
+     *
+     * `DIRECT_URL` e a mesma URL do Neon sem o sufixo `-pooler` no host. Sem a
+     * variavel definida nada muda: cai no `DATABASE_URL` de sempre. A aplicacao
+     * continua usando o pooler, que e o certo para o runtime.
+     */
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });
