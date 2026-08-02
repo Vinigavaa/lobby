@@ -4,6 +4,8 @@
  * servidor para que a pontuacao nao possa ser manipulada pelo cliente.
  */
 
+export const stopMinimumPlayers = 2;
+
 // Letras evitadas no sorteio inicial por gerarem poucas respostas.
 const excludedLetters = new Set(["K", "W", "X", "Y"]);
 const playableLetters = "ABCDEFGHIJLMNOPQRSTUVZ"

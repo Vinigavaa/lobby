@@ -42,7 +42,12 @@ import {
   stopDurationOptions,
   stopRoundOptions,
 } from "../stop-categories";
-import { computeStopScores, drawStopLetter, rejectionKey } from "../stop-engine";
+import {
+  computeStopScores,
+  drawStopLetter,
+  rejectionKey,
+  stopMinimumPlayers,
+} from "../stop-engine";
 import { prisma } from "../prisma";
 import {
   applyTriviaRoundResult,
@@ -4802,8 +4807,8 @@ function validateStopStartRoom(
     return "O jogo selecionado ainda nao esta disponivel";
   }
 
-  if (room.players.length < minimumPlayersToStart) {
-    return `A partida precisa de pelo menos ${minimumPlayersToStart} jogadores`;
+  if (room.players.length < stopMinimumPlayers) {
+    return `A partida precisa de pelo menos ${stopMinimumPlayers} jogadores`;
   }
 
   return null;

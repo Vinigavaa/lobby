@@ -26,6 +26,7 @@ import {
   palpiteCertoGameType,
   palpiteCertoMinimumPlayers,
 } from "@/lib/palpite-certo-engine";
+import { stopMinimumPlayers } from "@/lib/stop-engine";
 import { triviaMinimumPlayers } from "@/lib/trivia-themes";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ const minimumPlayersByGameType: Record<string, number> = {
   trivia: triviaMinimumPlayers,
   [palpiteCertoGameType]: palpiteCertoMinimumPlayers,
   [customGuessWhoGameType]: customGuessWhoMinimumPlayers,
+  stop: stopMinimumPlayers,
 };
 
 type RoomLobbyProps = {
