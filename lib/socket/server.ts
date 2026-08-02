@@ -6090,11 +6090,11 @@ async function disconnectRoomPlayer(
   socketId: string
 ) {
   try {
-    await prisma.$transaction(async (tx) => {
+    const hostRoomId = await prisma.$transaction(async (tx) => {
       const roomPlayer = await findRoomPlayer(tx, roomCode, userId);
 
       if (!roomPlayer || roomPlayer.socketId !== socketId) {
-        return;
+        return null;
       }
 
       await tx.roomPlayer.update({
@@ -6105,10 +6105,13 @@ async function disconnectRoomPlayer(
         },
       });
 
-      if (roomPlayer.isHost) {
-        await transferHost(tx, roomPlayer.roomId);
-      }
+      return roomPlayer.isHost ? roomPlayer.roomId : null;
     });
+
+    // Uma queda nao tira o comando na hora: o host tem a carencia para voltar.
+    if (hostRoomId) {
+      scheduleHostTransfer(roomCode, hostRoomId, userId);
+    }
 
     await emitRoomState(roomCode);
 
@@ -6180,6 +6183,71 @@ async function findRoomPlayer(
       isHost: true,
     },
   });
+}
+
+/**
+ * Quanto tempo o host pode ficar fora antes de perder o comando da sala.
+ *
+ * Trocar o host no instante da queda tirava os controles de quem so bloqueou a
+ * tela, atendeu uma ligacao ou trocou de app — e a troca nao tem volta. Sair
+ * da sala pelo botao continua passando o comando na hora; a carencia vale so
+ * para a queda de conexao.
+ */
+const hostTransferGraceMs = 30_000;
+
+/**
+ * Agenda a troca de host para depois da carencia.
+ *
+ * Nao guarda o timer: quando dispara, ele relê o estado e desiste se o host ja
+ * voltou. Por isso quedas seguidas podem agendar mais de uma verificacao sem
+ * problema — a primeira que encontrar o host ausente resolve, e as demais nao
+ * acham mais ninguem para transferir.
+ *
+ * Timers perdidos num restart do servidor sao aceitaveis: a proxima
+ * desconexao reagenda.
+ */
+function scheduleHostTransfer(
+  roomCode: string,
+  roomId: string,
+  userId: string
+) {
+  setTimeout(() => {
+    void transferHostIfStillAway(roomCode, roomId, userId);
+  }, hostTransferGraceMs);
+}
+
+async function transferHostIfStillAway(
+  roomCode: string,
+  roomId: string,
+  userId: string
+) {
+  try {
+    const nextHostId = await prisma.$transaction(async (tx) => {
+      const roomPlayer = await tx.roomPlayer.findUnique({
+        where: { roomId_userId: { roomId, userId } },
+        select: { isHost: true, isConnected: true },
+      });
+
+      // Voltou a tempo, ou ja perdeu o comando por outro caminho.
+      if (!roomPlayer || !roomPlayer.isHost || roomPlayer.isConnected) {
+        return null;
+      }
+
+      return transferHost(tx, roomId);
+    });
+
+    if (nextHostId) {
+      console.log(
+        `[sala ${roomCode}] host ausente por ${hostTransferGraceMs / 1000}s; comando passou para outro jogador`
+      );
+      await emitRoomState(roomCode);
+    }
+  } catch (error) {
+    console.error(
+      `[sala ${roomCode}] falha ao passar o comando de host adiante`,
+      error
+    );
+  }
 }
 
 async function transferHost(tx: SocketServerTransaction, roomId: string) {
