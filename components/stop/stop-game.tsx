@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 const userIdKey = "partyroom:user-id";
 const durationOptions = [30, 60, 120] as const;
 const roundOptions = [3, 5, 10] as const;
+const draftDebounceMs = 1200;
 
 type DurationOption = (typeof durationOptions)[number];
 type RoundOption = (typeof roundOptions)[number];
@@ -44,6 +45,7 @@ export function StopGame({ code }: StopGameProps) {
   const router = useRouter();
   const socketRef = useRef<LobbySocketClient | null>(null);
   const autoSubmittedRef = useRef(false);
+  const answersRef = useRef<Record<string, string>>({});
   const categoriesInitRef = useRef(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [state, setState] = useState<StopStatePayload | null>(null);
@@ -176,6 +178,58 @@ export function StopGame({ code }: StopGameProps) {
       window.clearInterval(interval);
     };
   }, [phase, deadline]);
+
+  // Rascunho: o que ja foi digitado vai para o servidor antes do tempo acabar.
+  //
+  // O envio automatico abaixo depende do relogio local, que o navegador do
+  // celular estrangula com o app em segundo plano ou a tela apagada. Salvando
+  // o rascunho, o encerramento pelo cronometro do servidor aproveita o que
+  // estava preenchido em vez de gravar tudo em branco.
+  useEffect(() => {
+    answersRef.current = answers;
+
+    if (phase !== "playing" || hasSubmitted || !currentUserId) {
+      return;
+    }
+
+    if (!Object.values(answers).some((value) => value.trim().length > 0)) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      socketRef.current?.emit(SOCKET_EVENTS.STOP_DRAFT, {
+        roomCode: code,
+        userId: currentUserId,
+        answers,
+      });
+    }, draftDebounceMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [answers, phase, hasSubmitted, currentUserId, code]);
+
+  // Sair da tela (trocar de app, bloquear o celular) nao pode perder o que foi
+  // digitado desde o ultimo rascunho: descarrega na hora.
+  useEffect(() => {
+    if (phase !== "playing" || hasSubmitted || !currentUserId) {
+      return;
+    }
+
+    function flushDraft() {
+      if (document.visibilityState !== "hidden" || !currentUserId) {
+        return;
+      }
+
+      socketRef.current?.emit(SOCKET_EVENTS.STOP_DRAFT, {
+        roomCode: code,
+        userId: currentUserId,
+        answers: answersRef.current,
+      });
+    }
+
+    document.addEventListener("visibilitychange", flushDraft);
+
+    return () => document.removeEventListener("visibilitychange", flushDraft);
+  }, [phase, hasSubmitted, currentUserId, code]);
 
   // Envio automatico quando o tempo esgota.
   useEffect(() => {

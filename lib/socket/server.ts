@@ -1425,6 +1425,32 @@ export function createSocketServer(httpServer: HttpServer) {
     );
 
     socket.on(
+      SOCKET_EVENTS.STOP_DRAFT,
+      async ({ roomCode, userId, answers }) => {
+        const normalizedRoomCode = normalizeRoomCode(roomCode);
+        const normalizedUserId = userId.trim();
+
+        if (!isValidRoomPayload(normalizedRoomCode, normalizedUserId)) {
+          return;
+        }
+
+        try {
+          // Sem emitir estado: o rascunho nao muda nada visivel para a sala.
+          await saveStopDraft(
+            normalizedRoomCode,
+            normalizedUserId,
+            answers ?? {}
+          );
+        } catch (error) {
+          console.error(
+            `[sala ${normalizedRoomCode}] falha ao salvar rascunho do Stop`,
+            error
+          );
+        }
+      }
+    );
+
+    socket.on(
       SOCKET_EVENTS.STOP_VOTE,
       async ({ roomCode, userId, targetUserId, category, reject }) => {
         const normalizedRoomCode = normalizeRoomCode(roomCode);
@@ -4454,27 +4480,32 @@ async function submitStopAnswers(
       return { error: "Partida de Stop nao encontrada" };
     }
 
-    if (match.state.phase !== "playing") {
-      return { error: "A rodada nao esta em andamento" };
-    }
-
     const state = match.state;
 
     if (!state.players.some((player) => player.userId === userId)) {
       return { error: "Voce nao participa desta partida" };
     }
 
+    if (state.phase !== "playing") {
+      // Corrida normal no fim do tempo: o cronometro do servidor fechou a
+      // rodada um instante antes do envio automatico chegar. As respostas ja
+      // estao salvas pelo rascunho, entao isso e sucesso, nao erro.
+      if (state.submissions[userId]?.submitted) {
+        return {
+          roomCode: match.room.code,
+          matchId: match.id,
+          phaseChanged: false,
+        };
+      }
+
+      return { error: "A rodada nao esta em andamento" };
+    }
+
     if (state.submissions[userId]?.submitted) {
       return { roomCode: match.room.code, matchId: match.id, phaseChanged: false };
     }
 
-    const sanitizedAnswers: Record<string, string> = {};
-
-    for (const category of state.categories) {
-      const value = answers[category];
-      sanitizedAnswers[category] =
-        typeof value === "string" ? value.slice(0, 40) : "";
-    }
+    const sanitizedAnswers = sanitizeStopAnswers(state.categories, answers);
 
     const submissions: StopMatchState["submissions"] = {
       ...state.submissions,
@@ -4500,6 +4531,72 @@ async function submitStopAnswers(
       matchId: match.id,
       phaseChanged: allSubmitted,
     };
+  });
+}
+
+function sanitizeStopAnswers(
+  categories: string[],
+  answers: Record<string, string>
+): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+
+  for (const category of categories) {
+    const value = answers[category];
+    sanitized[category] = typeof value === "string" ? value.slice(0, 40) : "";
+  }
+
+  return sanitized;
+}
+
+/**
+ * Guarda o que o jogador ja digitou, sem finalizar a rodada.
+ *
+ * O envio automatico do cliente quando o tempo zera nao e confiavel sozinho:
+ * no celular o navegador estrangula os timers com a tela apagada ou o app em
+ * segundo plano, e mesmo acordado ha a corrida entre o relogio local e o
+ * `expireStopRound`. Com o rascunho salvo, o encerramento pelo cronometro
+ * aproveita o que ja estava preenchido em vez de gravar tudo em branco.
+ */
+async function saveStopDraft(
+  roomCode: string,
+  userId: string,
+  answers: Record<string, string>
+): Promise<{ error: string } | { saved: boolean }> {
+  return prisma.$transaction(async (tx) => {
+    const match = await findActiveStopMatch(tx, roomCode, userId);
+
+    if (!match || !isStopMatchState(match.state)) {
+      return { error: "Partida de Stop nao encontrada" };
+    }
+
+    const state = match.state;
+
+    if (!state.players.some((player) => player.userId === userId)) {
+      return { error: "Voce nao participa desta partida" };
+    }
+
+    // Rascunho fora da rodada ou depois de finalizar nao tem efeito.
+    if (state.phase !== "playing" || state.submissions[userId]?.submitted) {
+      return { saved: false };
+    }
+
+    const nextState: StopMatchState = {
+      ...state,
+      submissions: {
+        ...state.submissions,
+        [userId]: {
+          submitted: false,
+          answers: sanitizeStopAnswers(state.categories, answers),
+        },
+      },
+    };
+
+    await tx.match.update({
+      where: { id: match.id },
+      data: { state: nextState },
+    });
+
+    return { saved: true };
   });
 }
 

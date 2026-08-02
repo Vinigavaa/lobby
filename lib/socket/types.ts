@@ -673,6 +673,7 @@ export interface ClientToServerEvents {
   "stop:start": (payload: StartGamePayload) => void;
   "stop:begin": (payload: StopBeginPayload) => void;
   "stop:submit": (payload: StopSubmitPayload) => void;
+  "stop:draft": (payload: StopSubmitPayload) => void;
   "stop:vote": (payload: StopVotePayload) => void;
   "stop:reveal-result": (payload: StopHostActionPayload) => void;
   "stop:next-round": (payload: StopHostActionPayload) => void;

@@ -27,6 +27,7 @@ export const SOCKET_EVENTS = {
   STOP_START: "stop:start",
   STOP_BEGIN: "stop:begin",
   STOP_SUBMIT: "stop:submit",
+  STOP_DRAFT: "stop:draft",
   STOP_VOTE: "stop:vote",
   STOP_REVEAL_RESULT: "stop:reveal-result",
   STOP_NEXT_ROUND: "stop:next-round",
