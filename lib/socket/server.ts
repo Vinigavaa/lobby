@@ -7279,8 +7279,19 @@ async function revealPalpiteCertoRoundIfComplete(
       return null;
     }
 
+    const guesses = collectPalpiteCertoGuesses(state);
+
+    // Sem nenhum palpite nao ha o que apurar, e "zero pendentes" aqui nao
+    // significa que todos responderam: significa que ninguem conectado esta
+    // faltando. No intervalo entre o lobby e a tela do jogo todos aparecem
+    // como desconectados, entao a primeira rodada revelava sozinha, com a
+    // resposta na tela antes de qualquer palpite.
+    if (guesses.length === 0) {
+      return null;
+    }
+
     const results = scorePalpiteCertoRound(
-      collectPalpiteCertoGuesses(state),
+      guesses,
       state.currentQuestion.correctValue,
       state.players
     );
