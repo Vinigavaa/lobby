@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-const confettiColors = ["#FF5A3C", "#2DD4BF", "#F5C542", "#8B7CF6", "#F5F7FA"];
+const confettiColors = ["#9146FF", "#00F593", "#F5C542", "#8B7CF6", "#F5F7FA"];
 const particleCount = 36;
 
 type Particle = {

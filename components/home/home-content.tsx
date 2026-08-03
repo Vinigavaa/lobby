@@ -189,8 +189,15 @@ export function HomeContent() {
           transition={{ duration: 0.35 }}
         >
           <div className="flex items-center gap-2">
-            <div className="relative size-[30px] overflow-hidden rounded-[9px]">
-              <Image src="/logo.png" alt="PartyRoom" fill className="object-cover" priority />
+            <div className="size-[30px] overflow-hidden rounded-[9px]">
+              <Image
+                src="/logo.png"
+                alt="PartyRoom"
+                width={30}
+                height={30}
+                className="size-full object-cover"
+                priority
+              />
             </div>
             <span className="font-heading text-lg font-bold">PartyRoom</span>
           </div>
@@ -250,7 +257,7 @@ export function HomeContent() {
                   maxLength={24}
                   aria-invalid={Boolean(error)}
                   aria-describedby={error ? "nickname-error" : undefined}
-                  className="h-12 rounded-xl border-border bg-muted text-base"
+                  className="h-12 border-border text-base"
                 />
                 {error ? (
                   <p id="nickname-error" className="text-sm text-destructive">
@@ -270,10 +277,10 @@ export function HomeContent() {
                       aria-label={`Usar avatar ${option}`}
                       aria-pressed={avatar === option}
                       className={cn(
-                        "flex aspect-square flex-1 items-center justify-center rounded-xl border text-xl transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
+                        "flex aspect-square flex-1 items-center justify-center rounded-[12px] border text-xl transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                         avatar === option
                           ? "border-accent bg-accent"
-                          : "border-border bg-muted hover:border-accent/60"
+                          : "border-border bg-background hover:border-accent/60"
                       )}
                     >
                       {option}
@@ -295,7 +302,7 @@ export function HomeContent() {
               </Button>
               {isSlow ? (
                 <p
-                  className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground"
+                  className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent"
                   aria-live="polite"
                 >
                   O servidor pode estar iniciando. Aguarde alguns segundos...
@@ -315,7 +322,7 @@ export function HomeContent() {
               <Button
                 type="button"
                 variant="ghost"
-                className="h-11 w-full gap-2 text-accent hover:text-accent"
+                className="h-11 w-full gap-2 text-muted-foreground hover:text-foreground"
                 disabled={isBusy}
                 onClick={() => navigateTo("/local")}
               >

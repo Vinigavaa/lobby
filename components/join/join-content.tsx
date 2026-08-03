@@ -217,8 +217,15 @@ export function JoinContent() {
           transition={{ duration: 0.4 }}
         >
           <div className="flex flex-col items-center gap-1.5 text-center">
-            <div className="relative mb-1 size-[52px] overflow-hidden rounded-2xl">
-              <Image src="/logo.png" alt="PartyRoom" fill className="object-cover" priority />
+            <div className="mb-1 size-[52px] overflow-hidden rounded-2xl">
+              <Image
+                src="/logo.png"
+                alt="PartyRoom"
+                width={52}
+                height={52}
+                className="size-full object-cover"
+                priority
+              />
             </div>
             <h1 className="font-heading text-2xl font-black">Entrar em sala</h1>
             <p className="text-[13.5px] leading-6 text-muted-foreground">
@@ -246,7 +253,7 @@ export function JoinContent() {
                         aria-label={`Digito ${index + 1} do codigo`}
                         aria-invalid={Boolean(error && code.length !== codeLength)}
                         className={cn(
-                          "size-full rounded-xl border bg-muted text-center text-2xl font-black text-foreground transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
+                          "size-full rounded-[12px] border bg-background text-center text-2xl font-black text-foreground transition focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none",
                           digit ? "border-2 border-primary" : "border-border"
                         )}
                       />
@@ -268,7 +275,7 @@ export function JoinContent() {
                 autoComplete="nickname"
                 maxLength={24}
                 aria-invalid={Boolean(error && !nickname.trim())}
-                className="h-12 rounded-xl border-border bg-muted text-base"
+                className="h-12 border-border text-base"
               />
             </div>
 
@@ -280,7 +287,7 @@ export function JoinContent() {
 
             {isSlow ? (
               <p
-                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent-foreground"
+                className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-center text-sm text-accent"
                 aria-live="polite"
               >
                 O servidor pode estar iniciando. Aguarde alguns segundos...

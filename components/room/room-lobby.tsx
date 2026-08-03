@@ -341,7 +341,7 @@ export function RoomLobby({
             <p className="text-sm font-medium text-muted-foreground">
               Sala PartyRoom
             </p>
-            <h1 className="font-heading text-5xl font-black tracking-[0.06em]">
+            <h1 className="font-heading text-5xl font-black tracking-[0.06em] text-primary">
               {code}
             </h1>
           </div>
@@ -430,7 +430,7 @@ export function RoomLobby({
             </div>
 
             {roomStatus !== "waiting" ? (
-              <p className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+              <p className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
                 Partida iniciada com {selectedGame?.name ?? "jogo selecionado"}.
               </p>
             ) : null}

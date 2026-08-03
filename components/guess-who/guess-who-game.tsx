@@ -309,7 +309,7 @@ export function GuessWhoGame({ code }: GuessWhoGameProps) {
         ) : null}
 
         {!state?.isHost && state?.phase === "playing" ? (
-          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
             O host pode encerrar a rodada quando todos terminarem.
           </p>
         ) : null}

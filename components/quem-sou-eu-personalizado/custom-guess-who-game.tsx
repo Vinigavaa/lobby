@@ -573,7 +573,7 @@ function PlayingPhase({
         ) : null}
 
         {ownPlayer?.pendingGuess ? (
-          <div className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-accent-foreground">
+          <div className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-accent">
             <p className="font-semibold">Aguardando confirmacao</p>
             <p className="mt-1">
               Sua resposta: {ownPlayer.pendingGuess.guess}
@@ -637,7 +637,7 @@ function PlayingPhase({
         ) : null}
 
         {ownPlayer?.hasSolved ? (
-          <p className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+          <p className="mt-4 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
             Voce acertou em {ownPlayer.solvedOrder}o lugar. Agora so acompanha a
             partida e vota nas respostas dos outros.
           </p>
@@ -822,7 +822,7 @@ function FinishedPhase({ isHost, onPlayAgain, players }: FinishedPhaseProps) {
           Jogar novamente
         </Button>
       ) : (
-        <p className="mt-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="mt-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           O host pode iniciar uma nova partida com os mesmos jogadores.
         </p>
       )}

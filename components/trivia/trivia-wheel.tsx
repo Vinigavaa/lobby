@@ -12,8 +12,8 @@ import { triviaThemes, triviaThemeRevealMs, triviaWheelSpinMs } from "@/lib/triv
 import { TriviaConfetti } from "./trivia-confetti";
 
 const wheelColors = [
-  "#FF5A3C",
-  "#2DD4BF",
+  "#9146FF",
+  "#00F593",
   "#F5C542",
   "#8B7CF6",
   "#3B82F6",

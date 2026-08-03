@@ -681,7 +681,7 @@ function PlayingPhase({
       </div>
 
       {hasSubmitted ? (
-        <div className="rounded-lg border border-accent/30 bg-accent/10 p-5 text-center text-sm text-accent-foreground">
+        <div className="rounded-lg border border-accent/30 bg-accent/10 p-5 text-center text-sm text-accent">
           <p className="font-semibold">Respostas enviadas!</p>
           <p className="mt-1">
             Aguardando os demais ({submittedCount}/{players.length}).
@@ -703,7 +703,7 @@ function PlayingPhase({
                 onChange={(event) =>
                   onAnswerChange(category.key, event.target.value)
                 }
-                className="h-11 bg-background text-base"
+                className="h-11 text-base"
               />
             </div>
           ))}
@@ -773,7 +773,7 @@ function ReviewPhase({
           Calcular pontuacao
         </Button>
       ) : (
-        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           Aguardando o host calcular a pontuacao...
         </p>
       )}
@@ -935,7 +935,7 @@ function ResultPhase({
                         answer.points === 10
                           ? "bg-primary/15 text-primary"
                           : answer.points === 5
-                            ? "bg-accent/20 text-accent-foreground"
+                            ? "bg-accent/20 text-accent"
                             : "bg-muted text-muted-foreground"
                       )}
                     >
@@ -978,7 +978,7 @@ function ResultPhase({
           </Button>
         </div>
       ) : (
-        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           {isFinal
             ? "Aguardando o host voltar ao lobby..."
             : "Aguardando o host iniciar a proxima rodada..."}

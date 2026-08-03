@@ -462,7 +462,7 @@ function RevealStatus({
       </div>
 
       {waitingForPlayers ? (
-        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           Aguardando outros jogadores.
         </p>
       ) : null}
@@ -581,7 +581,7 @@ function HintsPhase({
       ) : null}
 
       {!isCurrentTurn ? (
-        <p className="mt-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="mt-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           Aguarde sua vez para enviar a dica.
         </p>
       ) : null}
@@ -617,7 +617,7 @@ function VotingPhase({
       </div>
 
       {result ? (
-        <div className="mb-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-accent-foreground">
+        <div className="mb-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-accent">
           <p className="font-semibold">
             {result.groupWon ? "O grupo venceu" : "O impostor venceu"}
           </p>
@@ -630,7 +630,7 @@ function VotingPhase({
       ) : null}
 
       {voteConfirmed && !result ? (
-        <p className="mb-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+        <p className="mb-5 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
           Voto confirmado.
         </p>
       ) : null}
@@ -760,7 +760,7 @@ function ResultPhase({
             </Button>
           </>
         ) : (
-          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
             Aguardando host...
           </p>
         )}

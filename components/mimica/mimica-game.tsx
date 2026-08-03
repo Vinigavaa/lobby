@@ -627,7 +627,7 @@ function ResultPhase({
             </Button>
           </>
         ) : (
-          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent-foreground">
+          <p className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm text-accent">
             Aguardando o host iniciar a proxima rodada...
           </p>
         )}
